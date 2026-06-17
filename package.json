@@ -2,14 +2,19 @@
   "name": "google-takeout",
   "private": true,
   "type": "module",
+  "workspaces": [
+    "client"
+  ],
   "scripts": {
-    "find-metadata": "node find-metadata.js",
-    "geo-count": "node find-metadata.js --geo-count",
-    "timezone-count": "node find-metadata.js --timezone-count",
-    "match-metadata": "node find-metadata.js --match --my-folders \"My Folders\" --takeout Takeout",
-    "timezone": "node get-timezone.js"
+    "dev": "concurrently -n server,client -c blue,green \"node server/index.js\" \"npm run dev --workspace=client\"",
+    "build": "npm run build --workspace=client",
+    "start": "node server/index.js"
   },
   "dependencies": {
+    "express": "^5.1.0",
     "geo-tz": "^8.1.4"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.0"
   }
 }

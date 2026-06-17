@@ -261,7 +261,7 @@ function formatTimezoneLine(result) {
   return result ? result.timezone : "not found";
 }
 
-function formatLocalTime(epochSeconds, timeZone) {
+function formatLocalTime(epochSeconds, timeZone, includeTimezone = true) {
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone,
     day: "numeric",
@@ -271,27 +271,42 @@ function formatLocalTime(epochSeconds, timeZone) {
     minute: "2-digit",
     second: "2-digit",
     hour12: false,
-    timeZoneName: "short",
+    ...(includeTimezone ? { timeZoneName: "short" } : {}),
   }).formatToParts(new Date(epochSeconds * 1000));
 
   const get = (type) => parts.find((part) => part.type === type)?.value ?? "";
+  const base = `${get("day")} ${get("month")} ${get("year")}, ${get("hour")}:${get("minute")}:${get("second")}`;
 
-  return `${get("day")} ${get("month")} ${get("year")}, ${get("hour")}:${get("minute")}:${get("second")} ${get("timeZoneName")}`;
+  if (!includeTimezone) {
+    return base;
+  }
+
+  return `${base} ${get("timeZoneName")}`;
 }
 
-function formatLocalTimeWithOffset(epochSeconds, offsetMinutes) {
+function formatLocalTimeWithOffset(epochSeconds, offsetMinutes, includeTimezone = true) {
   const date = new Date(epochSeconds * 1000 + offsetMinutes * 60_000);
+  const base = `${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}, ${String(date.getUTCHours()).padStart(2, "0")}:${String(date.getUTCMinutes()).padStart(2, "0")}:${String(date.getUTCSeconds()).padStart(2, "0")}`;
 
-  return `${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}, ${String(date.getUTCHours()).padStart(2, "0")}:${String(date.getUTCMinutes()).padStart(2, "0")}:${String(date.getUTCSeconds()).padStart(2, "0")} ${formatUtcOffset(offsetMinutes)}`;
+  if (!includeTimezone) {
+    return base;
+  }
+
+  return `${base} ${formatUtcOffset(offsetMinutes)}`;
 }
 
-function formatUtcTime(epochSeconds) {
+function formatUtcTime(epochSeconds, includeTimezone = true) {
   const date = new Date(epochSeconds * 1000);
+  const base = `${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}, ${String(date.getUTCHours()).padStart(2, "0")}:${String(date.getUTCMinutes()).padStart(2, "0")}:${String(date.getUTCSeconds()).padStart(2, "0")}`;
 
-  return `${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}, ${String(date.getUTCHours()).padStart(2, "0")}:${String(date.getUTCMinutes()).padStart(2, "0")}:${String(date.getUTCSeconds()).padStart(2, "0")} UTC`;
+  if (!includeTimezone) {
+    return base;
+  }
+
+  return `${base} UTC`;
 }
 
-function formatExifDatetimeString(value) {
+function formatExifDatetimeString(value, includeTimezone = true) {
   const match = String(value).match(EXIF_DATETIME_RE);
   if (!match) {
     return value;
@@ -299,7 +314,7 @@ function formatExifDatetimeString(value) {
 
   const [, year, month, day, hour, minute, second, offset] = match;
   const base = `${Number(day)} ${MONTHS[Number(month) - 1]} ${year}, ${hour}:${minute}:${second}`;
-  if (!offset) {
+  if (!offset || !includeTimezone) {
     return base;
   }
 
@@ -307,20 +322,25 @@ function formatExifDatetimeString(value) {
   return offsetMinutes == null ? `${base} ${offset}` : `${base} ${formatUtcOffset(offsetMinutes)}`;
 }
 
-function formatMetadataPhotoTime(data, timezones) {
+function formatMetadataPhotoTime(data, timezones, includeTimezone = true) {
   const photoTakenTimestamp = Number(data.photoTakenTime?.timestamp);
   if (!Number.isFinite(photoTakenTimestamp)) {
     return "not found";
   }
 
   if (timezones.coordinates) {
-    return formatLocalTime(photoTakenTimestamp, timezones.coordinates.timezone);
+    return formatLocalTime(
+      photoTakenTimestamp,
+      timezones.coordinates.timezone,
+      includeTimezone,
+    );
   }
 
   if (timezones.filename?.offsetMinutes != null) {
     return formatLocalTimeWithOffset(
       photoTakenTimestamp,
       timezones.filename.offsetMinutes,
+      includeTimezone,
     );
   }
 
@@ -328,6 +348,7 @@ function formatMetadataPhotoTime(data, timezones) {
     return formatLocalTimeWithOffset(
       photoTakenTimestamp,
       timezones.exif.offsetMinutes,
+      includeTimezone,
     );
   }
 
@@ -335,29 +356,33 @@ function formatMetadataPhotoTime(data, timezones) {
     return formatLocalTimeWithOffset(
       photoTakenTimestamp,
       timezones.exifDatetime.offsetMinutes,
+      includeTimezone,
     );
   }
 
-  return formatUtcTime(photoTakenTimestamp);
+  return formatUtcTime(photoTakenTimestamp, includeTimezone);
 }
 
-function formatExifPhotoTime(mediaPath) {
+function formatExifPhotoTime(mediaPath, includeTimezone = true) {
   const exif = readExifTags(mediaPath);
   if (!exif) {
     return "not found";
   }
 
   if (exif.SubSecDateTimeOriginal) {
-    return formatExifDatetimeString(exif.SubSecDateTimeOriginal);
+    return formatExifDatetimeString(exif.SubSecDateTimeOriginal, includeTimezone);
   }
 
   if (exif.DateTimeOriginal) {
     const offset = exif.OffsetTimeOriginal ?? exif.OffsetTime;
     if (offset) {
-      return formatExifDatetimeString(`${exif.DateTimeOriginal}${offset}`);
+      return formatExifDatetimeString(
+        `${exif.DateTimeOriginal}${offset}`,
+        includeTimezone,
+      );
     }
 
-    return formatExifDatetimeString(exif.DateTimeOriginal);
+    return formatExifDatetimeString(exif.DateTimeOriginal, includeTimezone);
   }
 
   return "not found";
@@ -423,6 +448,120 @@ export function getPhotoTakenEpoch(data, mediaPath) {
   }
 
   return null;
+}
+
+function buildTimezoneSummary(coordinates, filename, exif, exifDatetime) {
+  return {
+    coordinates: coordinates?.timezone ?? null,
+    filename: filename?.timezone ?? null,
+    exif: exif?.timezone ?? null,
+    exifDatetime: exifDatetime?.timezone ?? null,
+  };
+}
+
+function getMetadataPhotoTimeTimezone(data, timezones) {
+  const photoTakenTimestamp = Number(data.photoTakenTime?.timestamp);
+  if (!Number.isFinite(photoTakenTimestamp)) {
+    return null;
+  }
+
+  if (timezones.coordinates) {
+    return { source: "coordinates", value: timezones.coordinates.timezone };
+  }
+
+  if (timezones.filename?.offsetMinutes != null) {
+    return { source: "filename", value: timezones.filename.timezone };
+  }
+
+  if (timezones.exif?.offsetMinutes != null) {
+    return { source: "exif", value: timezones.exif.timezone };
+  }
+
+  if (timezones.exifDatetime?.offsetMinutes != null) {
+    return { source: "exif datetime", value: timezones.exifDatetime.timezone };
+  }
+
+  return null;
+}
+
+function getExifPhotoTimeTimezone(mediaPath) {
+  const exif = readExifTags(mediaPath);
+  if (!exif) {
+    return null;
+  }
+
+  if (exif.SubSecDateTimeOriginal) {
+    const match = String(exif.SubSecDateTimeOriginal).match(/([+-]\d{2}:\d{2})$/);
+    if (match) {
+      const offsetMinutes = parseOffsetString(match[1]);
+      if (offsetMinutes != null) {
+        return { source: "exif", value: formatUtcOffset(offsetMinutes) };
+      }
+    }
+  }
+
+  if (exif.DateTimeOriginal) {
+    const offset = exif.OffsetTimeOriginal ?? exif.OffsetTime;
+    if (offset) {
+      const offsetMinutes = parseOffsetString(offset);
+      if (offsetMinutes != null) {
+        return { source: "exif", value: formatUtcOffset(offsetMinutes) };
+      }
+    }
+  }
+
+  return null;
+}
+
+function buildPhotoTakenSummary(data, mediaPath, timezones) {
+  const metadataTime = formatMetadataPhotoTime(data, timezones, false);
+  const exifTime = mediaPath ? formatExifPhotoTime(mediaPath, false) : null;
+
+  return {
+    metadata: metadataTime === "not found" ? null : metadataTime,
+    metadataTimezone: getMetadataPhotoTimeTimezone(data, timezones),
+    exif: exifTime === "not found" ? null : exifTime,
+    exifTimezone: mediaPath ? getExifPhotoTimeTimezone(mediaPath) : null,
+  };
+}
+
+export function analyzePhoto(data, { mediaPath } = {}) {
+  const coordinates = resolveTimezoneFromCoordinates(data);
+  const filename = resolveTimezoneFromFilename(data);
+  const exif = mediaPath ? resolveTimezoneFromExif(mediaPath) : null;
+  const exifDatetime = mediaPath
+    ? resolveTimezoneFromExifDateTime(data, mediaPath)
+    : null;
+  const timezones = { coordinates, filename, exif, exifDatetime };
+
+  return {
+    timezones: buildTimezoneSummary(coordinates, filename, exif, exifDatetime),
+    photoTaken: buildPhotoTakenSummary(data, mediaPath, timezones),
+    photoTakenEpoch: getPhotoTakenEpoch(data, mediaPath),
+  };
+}
+
+export function analyzeMediaFile(mediaPath) {
+  const exif = resolveTimezoneFromExif(mediaPath);
+
+  return {
+    timezones: {
+      coordinates: null,
+      filename: null,
+      exif: exif?.timezone ?? null,
+      exifDatetime: null,
+    },
+    photoTaken: {
+      metadata: null,
+      metadataTimezone: null,
+      exif: (() => {
+        const value = formatExifPhotoTime(mediaPath, false);
+        return value === "not found" ? null : value;
+      })(),
+      exifTimezone: getExifPhotoTimeTimezone(mediaPath),
+    },
+    photoTakenEpoch: getPhotoTakenEpochFromExif(mediaPath),
+  };
 }
 
 export function describePhoto(data, { mediaPath } = {}) {
