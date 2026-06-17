@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -178,11 +179,8 @@ function getMetadataTimezoneInfo(file) {
     return null;
   }
 
-  const { coordinates, filename, exif, exifDatetime } = file.timezones;
+  const { coordinates } = file.timezones;
   if (coordinates) return { source: "coordinates", value: coordinates };
-  if (filename) return { source: "filename", value: filename };
-  if (exif) return { source: "exif", value: exif };
-  if (exifDatetime) return { source: "exif datetime", value: exifDatetime };
   return null;
 }
 
@@ -491,17 +489,38 @@ function renderColumnCell(file, key) {
       />
     );
 
+    const conflictNames = file.metadataConflictNames ?? [];
+    const conflictTooltip =
+      conflictNames.length > 0
+        ? `Multiple conflicting metadata files: ${conflictNames.join(", ")}`
+        : "";
+
+    const content = (
+      <Stack direction="row" spacing={0.5} alignItems="center" component="span">
+        {chip}
+        {file.metadataConflict && (
+          <Tooltip title={conflictTooltip} placement="top" arrow>
+            <WarningAmberIcon
+              color="warning"
+              sx={{ fontSize: 18, cursor: "help" }}
+              aria-label="Conflicting metadata files"
+            />
+          </Tooltip>
+        )}
+      </Stack>
+    );
+
     if (file.metadataPath) {
       return (
         <Tooltip title={file.metadataPath} placement="top" arrow>
           <Box component="span" sx={{ display: "inline-flex" }}>
-            {chip}
+            {content}
           </Box>
         </Tooltip>
       );
     }
 
-    return chip;
+    return content;
   }
 
   if (key === "origin") {

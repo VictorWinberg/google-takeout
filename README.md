@@ -73,7 +73,7 @@ Each source is evaluated independently and shown on its own line in the UI.
 | **Exif** | `OffsetTimeOriginal` (or similar) read from the media file via exiftool |
 | **Exif datetime** | `DateTimeOriginal` from EXIF compared to metadata `photoTakenTime` to infer UTC offset (when no explicit EXIF offset tag exists) |
 
-**Photo taken (metadata)** converts the metadata UTC timestamp using the first available timezone above (coordinates → filename → exif → exif datetime).
+**Photo taken (metadata)** converts the metadata UTC timestamp using coordinates only; without GPS data it stays in UTC.
 
 **Photo taken (exif)** reads `SubSecDateTimeOriginal` or `DateTimeOriginal` directly from the file.
 

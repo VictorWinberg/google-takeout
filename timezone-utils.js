@@ -425,30 +425,6 @@ function formatMetadataPhotoTime(data, timezones, includeTimezone = true) {
     );
   }
 
-  if (timezones.filename?.offsetMinutes != null) {
-    return formatLocalTimeWithOffset(
-      photoTakenTimestamp,
-      timezones.filename.offsetMinutes,
-      includeTimezone,
-    );
-  }
-
-  if (timezones.exif?.offsetMinutes != null) {
-    return formatLocalTimeWithOffset(
-      photoTakenTimestamp,
-      timezones.exif.offsetMinutes,
-      includeTimezone,
-    );
-  }
-
-  if (timezones.exifDatetime?.offsetMinutes != null) {
-    return formatLocalTimeWithOffset(
-      photoTakenTimestamp,
-      timezones.exifDatetime.offsetMinutes,
-      includeTimezone,
-    );
-  }
-
   return formatUtcTime(photoTakenTimestamp, includeTimezone);
 }
 
@@ -589,18 +565,6 @@ function getMetadataPhotoTimeTimezone(data, timezones) {
 
   if (timezones.coordinates) {
     return { source: "coordinates", value: timezones.coordinates.timezone };
-  }
-
-  if (timezones.filename?.offsetMinutes != null) {
-    return { source: "filename", value: timezones.filename.timezone };
-  }
-
-  if (timezones.exif?.offsetMinutes != null) {
-    return { source: "exif", value: timezones.exif.timezone };
-  }
-
-  if (timezones.exifDatetime?.offsetMinutes != null) {
-    return { source: "exif datetime", value: timezones.exifDatetime.timezone };
   }
 
   return null;
