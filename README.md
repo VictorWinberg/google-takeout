@@ -77,4 +77,4 @@ Each source is evaluated independently and shown on its own line in the UI.
 
 **Photo taken (exif)** reads `SubSecDateTimeOriginal` or `DateTimeOriginal` directly from the file.
 
-**Apply dates** uses EXIF photo time first, then falls back to the metadata `photoTakenTime` timestamp. macOS `SetFile` writes both Date Created and Date Modified in local time.
+**Apply dates** prefers a timezone-aware photo time when available (metadata with resolved timezone, then EXIF with offset), otherwise falls back to EXIF, then metadata. The highlighted column in the UI shows which source is used. macOS `SetFile` writes both Date Created and Date Modified in local time.

@@ -528,18 +528,61 @@ export function getPhotoTakenEpochFromExif(mediaPath) {
   return parseExifDatetimeToEpoch(value);
 }
 
-export function getPhotoTakenEpoch(data, mediaPath) {
-  const exifEpoch = mediaPath ? getPhotoTakenEpochFromExif(mediaPath) : null;
-  if (exifEpoch != null) {
-    return exifEpoch;
+function getMetadataPhotoTakenEpoch(data) {
+  const metadataEpoch = Number(data?.photoTakenTime?.timestamp);
+  return Number.isFinite(metadataEpoch) ? metadataEpoch : null;
+}
+
+export function getPhotoTakenSource(photoTaken) {
+  const hasMetadata = photoTaken?.metadata != null;
+  const hasExif = photoTaken?.exif != null;
+  const metadataHasTimezone = photoTaken?.metadataTimezone != null;
+  const exifHasTimezone = photoTaken?.exifTimezone != null;
+
+  if (metadataHasTimezone && hasMetadata) {
+    return "metadata";
   }
 
-  const metadataEpoch = Number(data?.photoTakenTime?.timestamp);
-  if (Number.isFinite(metadataEpoch)) {
-    return metadataEpoch;
+  if (exifHasTimezone && hasExif) {
+    return "exif";
+  }
+
+  if (hasExif) {
+    return "exif";
+  }
+
+  if (hasMetadata) {
+    return "metadata";
   }
 
   return null;
+}
+
+export function resolvePhotoTakenSelection(data, mediaPath, photoTaken) {
+  const source = getPhotoTakenSource(photoTaken);
+  if (!source) {
+    return { source: null, epoch: null };
+  }
+
+  const epoch =
+    source === "exif"
+      ? getPhotoTakenEpochFromExif(mediaPath)
+      : getMetadataPhotoTakenEpoch(data);
+
+  return { source, epoch };
+}
+
+export function getPhotoTakenEpoch(data, mediaPath) {
+  const coordinates = resolveTimezoneFromCoordinates(data);
+  const filename = resolveTimezoneFromFilename(data);
+  const exif = mediaPath ? resolveTimezoneFromExif(mediaPath) : null;
+  const exifDatetime = mediaPath
+    ? resolveTimezoneFromExifDateTime(data, mediaPath)
+    : null;
+  const timezones = { coordinates, filename, exif, exifDatetime };
+  const photoTaken = buildPhotoTakenSummary(data, mediaPath, timezones);
+
+  return resolvePhotoTakenSelection(data, mediaPath, photoTaken).epoch;
 }
 
 function buildTimezoneSummary(coordinates, filename, exif, exifDatetime) {
@@ -629,16 +672,32 @@ export function analyzePhoto(data, { mediaPath } = {}) {
     : null;
   const timezones = { coordinates, filename, exif, exifDatetime };
 
+  const photoTaken = buildPhotoTakenSummary(data, mediaPath, timezones);
+  const { source: photoTakenSource, epoch: photoTakenEpoch } =
+    resolvePhotoTakenSelection(data, mediaPath, photoTaken);
+
   return {
     timezones: buildTimezoneSummary(coordinates, filename, exif, exifDatetime),
-    photoTaken: buildPhotoTakenSummary(data, mediaPath, timezones),
-    photoTakenEpoch: getPhotoTakenEpoch(data, mediaPath),
+    photoTaken,
+    photoTakenSource,
+    photoTakenEpoch,
     photoTakenExifEpoch: mediaPath ? getPhotoTakenEpochFromExif(mediaPath) : null,
   };
 }
 
 export function analyzeMediaFile(mediaPath) {
   const exif = resolveTimezoneFromExif(mediaPath);
+  const photoTaken = {
+    metadata: null,
+    metadataTimezone: null,
+    exif: (() => {
+      const value = formatExifPhotoTime(mediaPath, false);
+      return value === "not found" ? null : value;
+    })(),
+    exifTimezone: getExifPhotoTimeTimezone(mediaPath),
+  };
+  const { source: photoTakenSource, epoch: photoTakenEpoch } =
+    resolvePhotoTakenSelection({}, mediaPath, photoTaken);
 
   return {
     timezones: {
@@ -647,16 +706,9 @@ export function analyzeMediaFile(mediaPath) {
       exif: exif?.timezone ?? null,
       exifDatetime: null,
     },
-    photoTaken: {
-      metadata: null,
-      metadataTimezone: null,
-      exif: (() => {
-        const value = formatExifPhotoTime(mediaPath, false);
-        return value === "not found" ? null : value;
-      })(),
-      exifTimezone: getExifPhotoTimeTimezone(mediaPath),
-    },
-    photoTakenEpoch: getPhotoTakenEpochFromExif(mediaPath),
+    photoTaken,
+    photoTakenSource,
+    photoTakenEpoch,
     photoTakenExifEpoch: getPhotoTakenEpochFromExif(mediaPath),
   };
 }

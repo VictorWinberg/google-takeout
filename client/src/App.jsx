@@ -129,6 +129,55 @@ const COLUMNS = [
   { key: "photoTakenExif", label: "Photo taken (exif)" },
 ];
 
+function getPhotoTakenSource(file) {
+  if (file.photoTakenSource) {
+    return file.photoTakenSource;
+  }
+
+  const hasMetadata = file.photoTaken?.metadata != null;
+  const hasExif = file.photoTaken?.exif != null;
+  const metadataHasTimezone = file.photoTaken?.metadataTimezone != null;
+  const exifHasTimezone = file.photoTaken?.exifTimezone != null;
+
+  if (metadataHasTimezone && hasMetadata) {
+    return "metadata";
+  }
+
+  if (exifHasTimezone && hasExif) {
+    return "exif";
+  }
+
+  if (hasExif) {
+    return "exif";
+  }
+
+  if (hasMetadata) {
+    return "metadata";
+  }
+
+  return null;
+}
+
+function getChosenPhotoTakenReference(file) {
+  const source = getPhotoTakenSource(file);
+
+  if (source === "metadata") {
+    return {
+      display: file.photoTaken?.metadata ?? null,
+      epoch: file.photoTakenEpoch ?? null,
+    };
+  }
+
+  if (source === "exif") {
+    return {
+      display: file.photoTaken?.exif ?? null,
+      epoch: file.photoTakenEpoch ?? null,
+    };
+  }
+
+  return { display: null, epoch: null };
+}
+
 function formatPhotoTakenTimezone({ source, value }) {
   return `${source}: ${value}`;
 }
@@ -162,25 +211,53 @@ function getExifTimezoneInfo(file) {
   return { source: "exif", value: file.timezones.exif };
 }
 
-function PhotoTakenCell({ value, timezoneInfo }) {
+function PhotoTakenCell({ value, timezoneInfo, highlighted = false }) {
   if (value == null || value === "") {
     return <CellValue value={null} />;
   }
 
+  const highlightSx = highlighted
+    ? {
+        color: "primary.main",
+        fontWeight: 700,
+        bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1),
+        px: 0.75,
+        py: 0.25,
+        borderRadius: 0.5,
+      }
+    : {};
+
   if (!timezoneInfo) {
+    if (highlighted) {
+      return (
+        <Typography variant="body2" sx={highlightSx}>
+          {value}
+        </Typography>
+      );
+    }
+
     return <CellValue value={value} />;
   }
 
   return (
-    <Tooltip title={formatPhotoTakenTimezone(timezoneInfo)} placement="top" arrow>
+    <Tooltip
+      title={
+        highlighted
+          ? `Used for apply · ${formatPhotoTakenTimezone(timezoneInfo)}`
+          : formatPhotoTakenTimezone(timezoneInfo)
+      }
+      placement="top"
+      arrow
+    >
       <Box
         component="span"
         onClick={(event) => event.stopPropagation()}
         sx={{
           display: "inline-block",
           cursor: "help",
-          borderBottom: "1px dotted",
+          borderBottom: highlighted ? "none" : "1px dotted",
           borderColor: "text.secondary",
+          ...highlightSx,
         }}
       >
         {value}
@@ -239,50 +316,34 @@ function fileDateMatchesReference({ display, epoch }, referenceDisplay, referenc
 }
 
 function getDateMismatch(file) {
-  const exifDisplay = file.photoTaken?.exif ?? null;
-  const exifEpoch = file.photoTakenExifEpoch ?? null;
+  const { display: referenceDisplay, epoch: referenceEpoch } =
+    getChosenPhotoTakenReference(file);
 
-  if (exifDisplay) {
-    const createdMatches = fileDateMatchesReference(
-      {
-        display: file.fileDates?.createdAt ?? null,
-        epoch: file.fileDates?.createdAtEpoch ?? null,
-      },
-      exifDisplay,
-      exifEpoch,
-    );
-    const modifiedMatches = fileDateMatchesReference(
-      {
-        display: file.fileDates?.modifiedAt ?? null,
-        epoch: file.fileDates?.modifiedAtEpoch ?? null,
-      },
-      exifDisplay,
-      exifEpoch,
-    );
-
-    return {
-      hasMismatch: !(createdMatches && modifiedMatches),
-      createdMismatch: !createdMatches,
-      modifiedMismatch: !modifiedMatches,
-    };
-  }
-
-  const referenceEpoch = file.photoTakenEpoch;
-  if (referenceEpoch == null) {
+  if (referenceDisplay == null && referenceEpoch == null) {
     return { hasMismatch: false, createdMismatch: false, modifiedMismatch: false };
   }
 
-  const createdMismatch =
-    file.fileDates?.createdAtEpoch != null &&
-    !epochsMatchWithinTolerance(file.fileDates.createdAtEpoch, referenceEpoch);
-  const modifiedMismatch =
-    file.fileDates?.modifiedAtEpoch != null &&
-    !epochsMatchWithinTolerance(file.fileDates.modifiedAtEpoch, referenceEpoch);
+  const createdMatches = fileDateMatchesReference(
+    {
+      display: file.fileDates?.createdAt ?? null,
+      epoch: file.fileDates?.createdAtEpoch ?? null,
+    },
+    referenceDisplay,
+    referenceEpoch,
+  );
+  const modifiedMatches = fileDateMatchesReference(
+    {
+      display: file.fileDates?.modifiedAt ?? null,
+      epoch: file.fileDates?.modifiedAtEpoch ?? null,
+    },
+    referenceDisplay,
+    referenceEpoch,
+  );
 
   return {
-    hasMismatch: createdMismatch || modifiedMismatch,
-    createdMismatch,
-    modifiedMismatch,
+    hasMismatch: !(createdMatches && modifiedMatches),
+    createdMismatch: !createdMatches,
+    modifiedMismatch: !modifiedMatches,
   };
 }
 
@@ -315,6 +376,7 @@ function getCellValue(file, key) {
 
 function renderColumnCell(file, key) {
   const dateMismatch = getDateMismatch(file);
+  const usedSource = getPhotoTakenSource(file);
 
   if (key === "path") {
     return (
@@ -366,6 +428,7 @@ function renderColumnCell(file, key) {
       <PhotoTakenCell
         value={file.photoTaken?.metadata}
         timezoneInfo={getMetadataTimezoneInfo(file)}
+        highlighted={usedSource === "metadata"}
       />
     );
   }
@@ -375,6 +438,7 @@ function renderColumnCell(file, key) {
       <PhotoTakenCell
         value={file.photoTaken?.exif}
         timezoneInfo={getExifTimezoneInfo(file)}
+        highlighted={usedSource === "exif"}
       />
     );
   }
@@ -432,6 +496,9 @@ function StatCard({ label, value }) {
   );
 }
 
+const INITIAL_ROW_LIMIT = 200;
+const ROW_INCREMENT = 100;
+
 function FileTable({
   title,
   files,
@@ -444,6 +511,14 @@ function FileTable({
   onPreview,
   highlightMismatch = false,
 }) {
+  const [visibleCount, setVisibleCount] = useState(INITIAL_ROW_LIMIT);
+  const visibleFiles = files.slice(0, visibleCount);
+  const hasMoreRows = visibleCount < files.length;
+
+  useEffect(() => {
+    setVisibleCount(INITIAL_ROW_LIMIT);
+  }, [files]);
+
   const selectableFiles = files.filter(canApply);
   const allSelectableSelected =
     selectableFiles.length > 0 &&
@@ -492,7 +567,7 @@ function FileTable({
                 <TableCell colSpan={COLUMNS.length + 1}>No files in this section.</TableCell>
               </TableRow>
             ) : (
-              files.map((file) => {
+              visibleFiles.map((file) => {
                 const applicable = canApply(file);
                 const isSelected = selected.has(file.path);
                 const canPreview = getMediaKind(file.path) != null;
@@ -538,6 +613,18 @@ function FileTable({
           </TableBody>
         </Table>
       </TableContainer>
+      {hasMoreRows && (
+        <Box sx={{ display: "flex", justifyContent: "center", mt: 2 }}>
+          <Button
+            variant="outlined"
+            onClick={() =>
+              setVisibleCount((count) => Math.min(count + ROW_INCREMENT, files.length))
+            }
+          >
+            Show 100 more ({files.length - visibleCount} remaining)
+          </Button>
+        </Box>
+      )}
     </Box>
   );
 }
