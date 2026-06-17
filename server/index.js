@@ -56,7 +56,7 @@ app.get("/api/files", async (_req, res) => {
   }
 });
 
-app.post("/api/apply", (req, res) => {
+app.post("/api/apply", async (req, res) => {
   const paths = req.body?.paths;
 
   if (!Array.isArray(paths) || paths.length === 0) {
@@ -65,7 +65,7 @@ app.post("/api/apply", (req, res) => {
   }
 
   try {
-    const result = applyPhotoTakenTimes({
+    const result = await applyPhotoTakenTimes({
       paths,
       targetRoot: TARGET_ROOT,
       takeoutRoot: TAKEOUT_ROOT,

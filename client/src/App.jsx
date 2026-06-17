@@ -299,6 +299,48 @@ function canApply(file) {
 
 const DATE_MATCH_TOLERANCE_SECONDS = 60;
 
+const FILE_DATE_MONTHS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+function formatFileDateFromEpoch(epoch) {
+  const date = new Date(epoch * 1000);
+  return `${date.getDate()} ${FILE_DATE_MONTHS[date.getMonth()]} ${date.getFullYear()}, ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}:${String(date.getSeconds()).padStart(2, "0")}`;
+}
+
+function mergeApplyResults(prevData, results) {
+  const appliedByPath = new Map(
+    results.filter((result) => result.ok).map((result) => [result.path, result.photoTakenEpoch]),
+  );
+
+  if (appliedByPath.size === 0 || !prevData?.files) {
+    return prevData;
+  }
+
+  return {
+    ...prevData,
+    files: prevData.files.map((file) => {
+      const epoch = appliedByPath.get(file.path);
+      if (epoch == null) {
+        return file;
+      }
+
+      const formatted = formatFileDateFromEpoch(epoch);
+      return {
+        ...file,
+        fileDates: {
+          ...file.fileDates,
+          createdAt: formatted,
+          modifiedAt: formatted,
+          createdAtEpoch: epoch,
+          modifiedAtEpoch: epoch,
+        },
+      };
+    }),
+  };
+}
+
 function epochsMatchWithinTolerance(epoch, referenceEpoch) {
   if (epoch == null || referenceEpoch == null) {
     return false;
@@ -815,11 +857,24 @@ export default function App() {
         throw new Error(body.error ?? `Apply failed (${response.status})`);
       }
 
+      const successful = body.results?.filter((result) => result.ok) ?? [];
       const failed = body.results?.filter((result) => !result.ok) ?? [];
+
+      if (successful.length > 0) {
+        setData((prev) => mergeApplyResults(prev, successful));
+      }
+
       if (failed.length > 0) {
         setApplyNotice({
           severity: "warning",
           message: `Applied ${body.applied} file(s), ${body.failed} failed: ${failed.map((result) => `${result.path} (${result.error})`).join("; ")}`,
+        });
+        setSelected((current) => {
+          const next = new Set(current);
+          for (const result of successful) {
+            next.delete(result.path);
+          }
+          return next;
         });
       } else {
         setApplyNotice({
@@ -827,7 +882,6 @@ export default function App() {
           message: `Applied photo taken time to ${body.applied} file(s).`,
         });
         setSelected(new Set());
-        await loadData();
       }
     } catch (err) {
       setApplyNotice({ severity: "error", message: err.message });
