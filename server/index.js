@@ -22,6 +22,15 @@ function resolveTargetFile(relPath) {
   return fullPath;
 }
 
+function normalizeMediaPath(rawPath) {
+  if (typeof rawPath !== "string") {
+    return null;
+  }
+
+  const path = rawPath.trim();
+  return path || null;
+}
+
 const app = express();
 app.use(express.json());
 
@@ -68,9 +77,11 @@ app.post("/api/apply", (req, res) => {
 });
 
 app.get("/api/media", (req, res) => {
-  const relPath = req.query.path;
+  const relPath = normalizeMediaPath(
+    Array.isArray(req.query.path) ? req.query.path[0] : req.query.path,
+  );
 
-  if (!relPath || typeof relPath !== "string") {
+  if (!relPath) {
     res.status(400).json({ error: "path query parameter is required" });
     return;
   }
@@ -86,11 +97,29 @@ app.get("/api/media", (req, res) => {
     return;
   }
 
-  res.sendFile(fullPath);
+  res.sendFile(fullPath, (err) => {
+    if (!err) {
+      return;
+    }
+
+    if (!res.headersSent) {
+      const status = err.code === "ENOENT" ? 404 : 500;
+      res.status(status).json({
+        error: status === 404 ? "File not found" : "Failed to read file",
+      });
+    }
+  });
+});
+
+app.use("/api", (_req, res) => {
+  res.status(404).json({ error: "Not found" });
 });
 
 const clientDist = join(ROOT, "client/dist");
-if (existsSync(clientDist)) {
+const serveClient =
+  process.env.SERVE_CLIENT !== "false" && existsSync(clientDist);
+
+if (serveClient) {
   app.use(express.static(clientDist));
   app.get("/{*splat}", (_req, res) => {
     res.sendFile(join(clientDist, "index.html"));

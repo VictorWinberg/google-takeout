@@ -6,7 +6,7 @@
     "client"
   ],
   "scripts": {
-    "dev": "concurrently -n server,client -c blue,green \"node server/index.js\" \"npm run dev --workspace=client\"",
+    "dev": "concurrently -n server,client -c blue,green \"SERVE_CLIENT=false node server/index.js\" \"npm run dev --workspace=client\"",
     "build": "npm run build --workspace=client",
     "start": "node server/index.js"
   },

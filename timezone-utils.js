@@ -613,6 +613,7 @@ export function analyzePhoto(data, { mediaPath } = {}) {
     timezones: buildTimezoneSummary(coordinates, filename, exif, exifDatetime),
     photoTaken: buildPhotoTakenSummary(data, mediaPath, timezones),
     photoTakenEpoch: getPhotoTakenEpoch(data, mediaPath),
+    photoTakenExifEpoch: mediaPath ? getPhotoTakenEpochFromExif(mediaPath) : null,
   };
 }
 
@@ -636,6 +637,7 @@ export function analyzeMediaFile(mediaPath) {
       exifTimezone: getExifPhotoTimeTimezone(mediaPath),
     },
     photoTakenEpoch: getPhotoTakenEpochFromExif(mediaPath),
+    photoTakenExifEpoch: getPhotoTakenEpochFromExif(mediaPath),
   };
 }
 

@@ -50,6 +50,68 @@ function mediaUrl(path) {
   return `/api/media?path=${encodeURIComponent(path)}`;
 }
 
+function usePreviewSource(previewPath) {
+  const [source, setSource] = useState({
+    url: null,
+    loading: false,
+    error: null,
+  });
+
+  useEffect(() => {
+    if (!previewPath) {
+      setSource({ url: null, loading: false, error: null });
+      return undefined;
+    }
+
+    let cancelled = false;
+    let objectUrl;
+
+    setSource({ url: null, loading: true, error: null });
+
+    fetch(mediaUrl(previewPath))
+      .then(async (response) => {
+        const contentType = response.headers.get("content-type") ?? "";
+
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          throw new Error(body.error ?? `Failed to load preview (${response.status})`);
+        }
+
+        if (contentType.includes("text/html")) {
+          throw new Error(
+            "Server returned HTML instead of media. Restart the server and use http://localhost:5173 in dev.",
+          );
+        }
+
+        return response.blob();
+      })
+      .then((blob) => {
+        if (cancelled) {
+          return;
+        }
+
+        objectUrl = URL.createObjectURL(blob);
+        setSource({ url: objectUrl, loading: false, error: null });
+      })
+      .catch((err) => {
+        if (cancelled) {
+          return;
+        }
+
+        setSource({ url: null, loading: false, error: err.message });
+      });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [previewPath]);
+
+  return source;
+}
+
 function getMediaKind(path) {
   const ext = path.slice(path.lastIndexOf(".")).toLowerCase();
   if (IMAGE_EXTENSIONS.has(ext)) return "image";
@@ -158,17 +220,64 @@ function canApply(file) {
   return file.photoTakenEpoch != null;
 }
 
+const DATE_MATCH_TOLERANCE_SECONDS = 60;
+
+function epochsMatchWithinTolerance(epoch, referenceEpoch) {
+  if (epoch == null || referenceEpoch == null) {
+    return false;
+  }
+
+  return Math.abs(epoch - referenceEpoch) <= DATE_MATCH_TOLERANCE_SECONDS;
+}
+
+function fileDateMatchesReference({ display, epoch }, referenceDisplay, referenceEpoch) {
+  if (referenceDisplay != null && display === referenceDisplay) {
+    return true;
+  }
+
+  return epochsMatchWithinTolerance(epoch, referenceEpoch);
+}
+
 function getDateMismatch(file) {
-  if (file.photoTakenEpoch == null) {
+  const exifDisplay = file.photoTaken?.exif ?? null;
+  const exifEpoch = file.photoTakenExifEpoch ?? null;
+
+  if (exifDisplay) {
+    const createdMatches = fileDateMatchesReference(
+      {
+        display: file.fileDates?.createdAt ?? null,
+        epoch: file.fileDates?.createdAtEpoch ?? null,
+      },
+      exifDisplay,
+      exifEpoch,
+    );
+    const modifiedMatches = fileDateMatchesReference(
+      {
+        display: file.fileDates?.modifiedAt ?? null,
+        epoch: file.fileDates?.modifiedAtEpoch ?? null,
+      },
+      exifDisplay,
+      exifEpoch,
+    );
+
+    return {
+      hasMismatch: !(createdMatches && modifiedMatches),
+      createdMismatch: !createdMatches,
+      modifiedMismatch: !modifiedMatches,
+    };
+  }
+
+  const referenceEpoch = file.photoTakenEpoch;
+  if (referenceEpoch == null) {
     return { hasMismatch: false, createdMismatch: false, modifiedMismatch: false };
   }
 
   const createdMismatch =
     file.fileDates?.createdAtEpoch != null &&
-    file.fileDates.createdAtEpoch !== file.photoTakenEpoch;
+    !epochsMatchWithinTolerance(file.fileDates.createdAtEpoch, referenceEpoch);
   const modifiedMismatch =
     file.fileDates?.modifiedAtEpoch != null &&
-    file.fileDates.modifiedAtEpoch !== file.photoTakenEpoch;
+    !epochsMatchWithinTolerance(file.fileDates.modifiedAtEpoch, referenceEpoch);
 
   return {
     hasMismatch: createdMismatch || modifiedMismatch,
@@ -447,6 +556,7 @@ export default function App() {
   const [previewPath, setPreviewPath] = useState(null);
 
   const previewKind = previewPath ? getMediaKind(previewPath) : null;
+  const previewSource = usePreviewSource(previewPath);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -781,10 +891,22 @@ export default function App() {
           {previewPath}
         </DialogTitle>
         <DialogContent dividers sx={{ display: "flex", justifyContent: "center", p: 2 }}>
-          {previewPath && previewKind === "image" && (
+          {previewSource.loading && (
+            <Stack direction="row" spacing={2} alignItems="center">
+              <CircularProgress size={24} />
+              <Typography color="text.secondary">Loading preview…</Typography>
+            </Stack>
+          )}
+          {previewSource.error && (
+            <Alert severity="error" sx={{ width: "100%" }}>
+              {previewSource.error}
+            </Alert>
+          )}
+          {previewSource.url && previewKind === "image" && (
             <Box
               component="img"
-              src={mediaUrl(previewPath)}
+              key={previewPath}
+              src={previewSource.url}
               alt={previewPath}
               sx={{
                 maxWidth: "100%",
@@ -793,10 +915,11 @@ export default function App() {
               }}
             />
           )}
-          {previewPath && previewKind === "video" && (
+          {previewSource.url && previewKind === "video" && (
             <Box
               component="video"
-              src={mediaUrl(previewPath)}
+              key={previewPath}
+              src={previewSource.url}
               controls
               sx={{
                 maxWidth: "100%",
