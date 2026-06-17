@@ -1,6 +1,10 @@
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
+import { promisify } from "node:util";
 import { find } from "geo-tz";
+import { DEFAULT_CONCURRENCY, mapWithConcurrency } from "./lib/concurrency.js";
+
+const execFileAsync = promisify(execFile);
 
 const DATETIME_TITLE_RE = /^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})/;
 const EXIF_DATETIME_RE =
@@ -124,6 +128,30 @@ export function getTimezoneFromCoords(lat, lng) {
   return timezones[0] ?? null;
 }
 
+const EXIF_TAG_ARGS = [
+  "-n",
+  "-GPSLatitude",
+  "-GPSLongitude",
+  "-OffsetTimeOriginal",
+  "-OffsetTime",
+  "-OffsetTimeDigitized",
+  "-SubSecDateTimeOriginal",
+  "-DateTimeOriginal",
+];
+
+const EXIF_BATCH_SIZE = 25;
+
+let exifCache = null;
+
+export async function withExifCache(fn) {
+  exifCache = new Map();
+  try {
+    return await fn();
+  } finally {
+    exifCache = null;
+  }
+}
+
 function runExiftool(mediaPath, args) {
   if (!existsSync(mediaPath)) {
     return null;
@@ -140,17 +168,64 @@ function runExiftool(mediaPath, args) {
   }
 }
 
+function storeExifRows(rows) {
+  for (const row of rows) {
+    const { SourceFile, ...tags } = row;
+    exifCache.set(SourceFile, tags);
+  }
+}
+
+async function preloadExifChunk(existingPaths) {
+  try {
+    const { stdout } = await execFileAsync(
+      "exiftool",
+      ["-j", ...EXIF_TAG_ARGS, ...existingPaths],
+      { maxBuffer: 64 * 1024 * 1024 },
+    );
+
+    storeExifRows(JSON.parse(stdout));
+  } catch {
+    await mapWithConcurrency(
+      existingPaths,
+      async (mediaPath) => {
+        if (!exifCache.has(mediaPath)) {
+          exifCache.set(mediaPath, runExiftool(mediaPath, EXIF_TAG_ARGS));
+        }
+      },
+      DEFAULT_CONCURRENCY,
+    );
+  }
+}
+
+export async function preloadExifTags(mediaPaths, {
+  concurrency = DEFAULT_CONCURRENCY,
+} = {}) {
+  if (!exifCache) {
+    return;
+  }
+
+  const chunks = [];
+  for (let index = 0; index < mediaPaths.length; index += EXIF_BATCH_SIZE) {
+    const existingPaths = mediaPaths
+      .slice(index, index + EXIF_BATCH_SIZE)
+      .filter((mediaPath) => existsSync(mediaPath));
+
+    if (existingPaths.length > 0) {
+      chunks.push(existingPaths);
+    }
+  }
+
+  await mapWithConcurrency(chunks, preloadExifChunk, concurrency);
+}
+
 export function readExifTags(mediaPath) {
-  return runExiftool(mediaPath, [
-    "-n",
-    "-GPSLatitude",
-    "-GPSLongitude",
-    "-OffsetTimeOriginal",
-    "-OffsetTime",
-    "-OffsetTimeDigitized",
-    "-SubSecDateTimeOriginal",
-    "-DateTimeOriginal",
-  ]);
+  if (exifCache?.has(mediaPath)) {
+    return exifCache.get(mediaPath);
+  }
+
+  const result = runExiftool(mediaPath, EXIF_TAG_ARGS);
+  exifCache?.set(mediaPath, result);
+  return result;
 }
 
 export function extractOffsetFromExif(exif) {

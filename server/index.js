@@ -35,9 +35,9 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
-app.get("/api/files", (_req, res) => {
+app.get("/api/files", async (_req, res) => {
   try {
-    const result = scanTargetFiles({
+    const result = await scanTargetFiles({
       targetRoot: TARGET_ROOT,
       takeoutRoot: TAKEOUT_ROOT,
     });
