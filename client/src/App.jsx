@@ -126,6 +126,7 @@ const COLUMNS = [
   { key: "modifiedAt", label: "Modified at" },
   { key: "hasMetaMatch", label: "Meta match" },
   { key: "origin", label: "Origin" },
+  { key: "photoTakenFilename", label: "Photo taken (filename)" },
   { key: "photoTakenMetadata", label: "Photo taken (metadata)" },
   { key: "photoTakenExif", label: "Photo taken (exif)" },
 ];
@@ -149,6 +150,13 @@ function getPhotoTakenSource(file) {
 function getChosenPhotoTakenReference(file) {
   const source = getPhotoTakenSource(file);
 
+  if (source === "filename") {
+    return {
+      display: file.photoTaken?.filename ?? null,
+      epoch: file.photoTakenEpoch ?? null,
+    };
+  }
+
   if (source === "metadata") {
     return {
       display: file.photoTaken?.metadata ?? null,
@@ -168,6 +176,18 @@ function getChosenPhotoTakenReference(file) {
 
 function formatPhotoTakenTimezone({ source, value }) {
   return `${source}: ${value}`;
+}
+
+function getFilenameTimezoneInfo(file) {
+  if (file.photoTaken?.filenameTimezone) {
+    return file.photoTaken.filenameTimezone;
+  }
+
+  if (!file.photoTaken?.filename || !file.timezones?.filename) {
+    return null;
+  }
+
+  return { source: "filename", value: file.timezones.filename };
 }
 
 function getMetadataTimezoneInfo(file) {
@@ -444,6 +464,8 @@ function CellValue({ value }) {
 
 function getCellValue(file, key) {
   switch (key) {
+    case "photoTakenFilename":
+      return file.photoTaken?.filename;
     case "photoTakenMetadata":
       return file.photoTaken?.metadata;
     case "photoTakenExif":
@@ -492,7 +514,7 @@ function renderColumnCell(file, key) {
     const conflictNames = file.metadataConflictNames ?? [];
     const conflictTooltip =
       conflictNames.length > 0
-        ? `Multiple conflicting metadata files: ${conflictNames.join(", ")}`
+        ? `Multiple metadata files with different photo taken times: ${conflictNames.join(", ")}`
         : "";
 
     const content = (
@@ -525,6 +547,16 @@ function renderColumnCell(file, key) {
 
   if (key === "origin") {
     return <OriginCell origin={file.origin} />;
+  }
+
+  if (key === "photoTakenFilename") {
+    return (
+      <PhotoTakenCell
+        value={file.photoTaken?.filename}
+        timezoneInfo={getFilenameTimezoneInfo(file)}
+        highlighted={usedSource === "filename"}
+      />
+    );
   }
 
   if (key === "photoTakenMetadata") {
@@ -574,6 +606,8 @@ function sortValue(file, key) {
       return file.hasMetaMatch ? 1 : 0;
     case "origin":
       return file.origin?.label ?? "";
+    case "photoTakenFilename":
+      return file.photoTaken?.filename ?? "";
     case "photoTakenMetadata":
       return file.photoTaken?.metadata ?? "";
     case "photoTakenExif":
@@ -790,10 +824,13 @@ export default function App() {
           file.metadataPath,
           file.origin?.label,
           file.origin?.tooltip,
+          file.photoTaken?.filenameTimezone?.value,
+          file.photoTaken?.filenameTimezone?.source,
           file.photoTaken?.metadataTimezone?.value,
           file.photoTaken?.metadataTimezone?.source,
           file.photoTaken?.exifTimezone?.value,
           file.photoTaken?.exifTimezone?.source,
+          file.photoTaken?.filename,
           file.photoTaken?.metadata,
           file.photoTaken?.exif,
           file.fileDates?.createdAt,

@@ -73,8 +73,10 @@ Each source is evaluated independently and shown on its own line in the UI.
 | **Exif** | `OffsetTimeOriginal` (or similar) read from the media file via exiftool |
 | **Exif datetime** | `DateTimeOriginal` from EXIF compared to metadata `photoTakenTime` to infer UTC offset (when no explicit EXIF offset tag exists) |
 
+**Photo taken (filename)** reads the datetime embedded in the title (e.g. `20260111_134032.jpg`) and infers timezone from metadata `photoTakenTime`.
+
 **Photo taken (metadata)** converts the metadata UTC timestamp using coordinates only; without GPS data it stays in UTC.
 
 **Photo taken (exif)** reads `SubSecDateTimeOriginal` or `DateTimeOriginal` directly from the file.
 
-**Apply dates** prefers metadata `photoTakenTime` when it exists, otherwise falls back to EXIF. The highlighted column in the UI shows which source is used. macOS `SetFile` writes both Date Created and Date Modified in local time.
+**Apply dates** prefers filename, then metadata `photoTakenTime`, then EXIF. The highlighted column in the UI shows which source is used. macOS `SetFile` writes both Date Created and Date Modified in local time.
