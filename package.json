@@ -1,0 +1,15 @@
+{
+  "name": "google-takeout",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "find-metadata": "node find-metadata.js",
+    "geo-count": "node find-metadata.js --geo-count",
+    "timezone-count": "node find-metadata.js --timezone-count",
+    "match-metadata": "node find-metadata.js --match --my-folders \"My Folders\" --takeout Takeout",
+    "timezone": "node get-timezone.js"
+  },
+  "dependencies": {
+    "geo-tz": "^8.1.4"
+  }
+}
