@@ -79,4 +79,12 @@ Each source is evaluated independently and shown on its own line in the UI.
 
 **Photo taken (exif)** reads `SubSecDateTimeOriginal` or `DateTimeOriginal` directly from the file.
 
-**Apply dates** prefers filename, then metadata `photoTakenTime`, then EXIF. The highlighted column in the UI shows which source is used. macOS `SetFile` writes both Date Created and Date Modified in local time.
+**Apply dates** priority:
+
+1. **Filename** — datetime embedded in the title
+2. **Metadata with timezone** — metadata `photoTakenTime` converted using GPS coordinates
+3. **EXIF with timezone** — when metadata has no GPS, EXIF has a timezone, and minutes/seconds match metadata
+4. **Metadata without timezone** — metadata `photoTakenTime` in UTC
+5. **EXIF** — fallback when no metadata
+
+The highlighted column in the UI shows which source is used. macOS `SetFile` writes both Date Created and Date Modified in local time.

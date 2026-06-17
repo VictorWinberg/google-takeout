@@ -561,7 +561,79 @@ function getMetadataPhotoTakenEpoch(data) {
   return Number.isFinite(metadataEpoch) ? metadataEpoch : null;
 }
 
-export function getPhotoTakenSource(photoTaken, data = {}) {
+function getUtcMinutesSeconds(epochSeconds) {
+  const date = new Date(epochSeconds * 1000);
+  return {
+    minute: date.getUTCMinutes(),
+    second: date.getUTCSeconds(),
+  };
+}
+
+function getExifMinutesSeconds(mediaPath) {
+  const exif = readExifTags(mediaPath);
+  const value = getExifPhotoTakenDatetime(exif);
+  if (!value) {
+    return null;
+  }
+
+  const match = String(value).match(/^(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2}):(\d{2})/);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    minute: Number(match[5]),
+    second: Number(match[6]),
+  };
+}
+
+function metadataExifMinutesSecondsMatch(data, mediaPath) {
+  const metadataEpoch = getMetadataPhotoTakenEpoch(data);
+  if (metadataEpoch == null) {
+    return false;
+  }
+
+  const metadataParts = getUtcMinutesSeconds(metadataEpoch);
+  const exifParts = getExifMinutesSeconds(mediaPath);
+  if (!exifParts) {
+    return false;
+  }
+
+  return (
+    metadataParts.minute === exifParts.minute &&
+    metadataParts.second === exifParts.second
+  );
+}
+
+function shouldPreferExifOverMetadata(data, mediaPath, timezones, photoTaken) {
+  if (!mediaPath || photoTaken?.exif == null) {
+    return false;
+  }
+
+  if (
+    getMetadataPhotoTakenEpoch(data) == null &&
+    photoTaken?.metadata == null
+  ) {
+    return false;
+  }
+
+  if (timezones?.coordinates) {
+    return false;
+  }
+
+  if (!photoTaken?.exifTimezone && !getExifPhotoTimeTimezone(mediaPath)) {
+    return false;
+  }
+
+  if (getPhotoTakenEpochFromExif(mediaPath) == null) {
+    return false;
+  }
+
+  return metadataExifMinutesSecondsMatch(data, mediaPath);
+}
+
+export function getPhotoTakenSource(photoTaken, data = {}, { mediaPath, timezones } = {}) {
+  // 1. filename
   if (
     photoTaken?.filename != null &&
     getPhotoTakenEpochFromFilename(data) != null
@@ -569,19 +641,44 @@ export function getPhotoTakenSource(photoTaken, data = {}) {
     return "filename";
   }
 
-  if (getMetadataPhotoTakenEpoch(data) != null || photoTaken?.metadata != null) {
+  const hasMetadata =
+    getMetadataPhotoTakenEpoch(data) != null || photoTaken?.metadata != null;
+  const hasExif = photoTaken?.exif != null;
+
+  // 2. metadata with timezone (GPS coordinates)
+  if (hasMetadata && timezones?.coordinates) {
     return "metadata";
   }
 
-  if (photoTaken?.exif != null) {
+  // 3. exif with timezone when minutes/seconds match metadata
+  if (
+    hasMetadata &&
+    hasExif &&
+    shouldPreferExifOverMetadata(data, mediaPath, timezones, photoTaken)
+  ) {
+    return "exif";
+  }
+
+  // 4. metadata without timezone
+  if (hasMetadata) {
+    return "metadata";
+  }
+
+  // 5. exif
+  if (hasExif) {
     return "exif";
   }
 
   return null;
 }
 
-export function resolvePhotoTakenSelection(data, mediaPath, photoTaken) {
-  const source = getPhotoTakenSource(photoTaken, data);
+export function resolvePhotoTakenSelection(
+  data,
+  mediaPath,
+  photoTaken,
+  timezones = null,
+) {
+  const source = getPhotoTakenSource(photoTaken, data, { mediaPath, timezones });
   if (!source) {
     return { source: null, epoch: null };
   }
@@ -606,7 +703,7 @@ export function getPhotoTakenEpoch(data, mediaPath) {
   const timezones = { coordinates, filename, exif, exifDatetime };
   const photoTaken = buildPhotoTakenSummary(data, mediaPath, timezones);
 
-  return resolvePhotoTakenSelection(data, mediaPath, photoTaken).epoch;
+  return resolvePhotoTakenSelection(data, mediaPath, photoTaken, timezones).epoch;
 }
 
 function buildTimezoneSummary(coordinates, filename, exif, exifDatetime) {
@@ -697,7 +794,7 @@ export function analyzePhoto(data, { mediaPath } = {}) {
 
   const photoTaken = buildPhotoTakenSummary(data, mediaPath, timezones);
   const { source: photoTakenSource, epoch: photoTakenEpoch } =
-    resolvePhotoTakenSelection(data, mediaPath, photoTaken);
+    resolvePhotoTakenSelection(data, mediaPath, photoTaken, timezones);
 
   return {
     timezones: buildTimezoneSummary(coordinates, filename, exif, exifDatetime),
