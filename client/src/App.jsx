@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -63,6 +62,7 @@ const COLUMNS = [
   { key: "createdAt", label: "Created at" },
   { key: "modifiedAt", label: "Modified at" },
   { key: "hasMetaMatch", label: "Meta match" },
+  { key: "origin", label: "Origin" },
   { key: "photoTakenMetadata", label: "Photo taken (metadata)" },
   { key: "photoTakenExif", label: "Photo taken (exif)" },
 ];
@@ -127,6 +127,33 @@ function PhotoTakenCell({ value, timezoneInfo }) {
   );
 }
 
+function OriginCell({ origin }) {
+  if (!origin?.label) {
+    return <CellValue value={null} />;
+  }
+
+  if (!origin.tooltip) {
+    return <CellValue value={origin.label} />;
+  }
+
+  return (
+    <Tooltip title={origin.tooltip} placement="top" arrow>
+      <Box
+        component="span"
+        onClick={(event) => event.stopPropagation()}
+        sx={{
+          display: "inline-block",
+          cursor: "help",
+          borderBottom: "1px dotted",
+          borderColor: "text.secondary",
+        }}
+      >
+        {origin.label}
+      </Box>
+    </Tooltip>
+  );
+}
+
 function canApply(file) {
   return file.photoTakenEpoch != null;
 }
@@ -148,19 +175,6 @@ function getDateMismatch(file) {
     createdMismatch,
     modifiedMismatch,
   };
-}
-
-function getDateMismatchMessage({ createdMismatch, modifiedMismatch }) {
-  if (createdMismatch && modifiedMismatch) {
-    return "Created at and Modified at differ from photo taken time";
-  }
-  if (createdMismatch) {
-    return "Created at differs from photo taken time";
-  }
-  if (modifiedMismatch) {
-    return "Modified at differs from photo taken time";
-  }
-  return "";
 }
 
 function CellValue({ value }) {
@@ -195,26 +209,19 @@ function renderColumnCell(file, key) {
 
   if (key === "path") {
     return (
-      <Stack direction="row" spacing={1} alignItems="flex-start">
-        {dateMismatch.hasMismatch && (
-          <Tooltip title={getDateMismatchMessage(dateMismatch)} arrow>
-            <WarningAmberIcon color="warning" sx={{ fontSize: 18, mt: 0.25 }} />
-          </Tooltip>
-        )}
-        <Box sx={{ minWidth: 0 }}>
-          <Typography
-            variant="body2"
-            sx={{ fontFamily: "monospace", wordBreak: "break-all" }}
-          >
-            {file.path}
+      <Box sx={{ minWidth: 0 }}>
+        <Typography
+          variant="body2"
+          sx={{ fontFamily: "monospace", wordBreak: "break-all" }}
+        >
+          {file.path}
+        </Typography>
+        {file.metadataError && (
+          <Typography variant="caption" color="error" display="block">
+            {file.metadataError}
           </Typography>
-          {file.metadataError && (
-            <Typography variant="caption" color="error" display="block">
-              {file.metadataError}
-            </Typography>
-          )}
-        </Box>
-      </Stack>
+        )}
+      </Box>
     );
   }
 
@@ -239,6 +246,10 @@ function renderColumnCell(file, key) {
     }
 
     return chip;
+  }
+
+  if (key === "origin") {
+    return <OriginCell origin={file.origin} />;
   }
 
   if (key === "photoTakenMetadata") {
@@ -284,6 +295,8 @@ function sortValue(file, key) {
       return file.path;
     case "hasMetaMatch":
       return file.hasMetaMatch ? 1 : 0;
+    case "origin":
+      return file.origin?.label ?? "";
     case "photoTakenMetadata":
       return file.photoTaken?.metadata ?? "";
     case "photoTakenExif":
@@ -474,6 +487,8 @@ export default function App() {
         const haystack = [
           file.path,
           file.metadataPath,
+          file.origin?.label,
+          file.origin?.tooltip,
           file.photoTaken?.metadataTimezone?.value,
           file.photoTaken?.metadataTimezone?.source,
           file.photoTaken?.exifTimezone?.value,
