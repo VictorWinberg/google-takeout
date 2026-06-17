@@ -137,18 +137,28 @@ const EXIF_TAG_ARGS = [
   "-OffsetTimeDigitized",
   "-SubSecDateTimeOriginal",
   "-DateTimeOriginal",
+  "-ContentCreateDate",
+  "-CreateDate",
 ];
 
 const EXIF_BATCH_SIZE = 25;
 
 let exifCache = null;
+let exifCacheUsers = 0;
 
 export async function withExifCache(fn) {
-  exifCache = new Map();
+  if (!exifCache) {
+    exifCache = new Map();
+  }
+  exifCacheUsers += 1;
+
   try {
     return await fn();
   } finally {
-    exifCache = null;
+    exifCacheUsers -= 1;
+    if (exifCacheUsers === 0) {
+      exifCache = null;
+    }
   }
 }
 
@@ -169,6 +179,10 @@ function runExiftool(mediaPath, args) {
 }
 
 function storeExifRows(rows) {
+  if (!exifCache) {
+    return;
+  }
+
   for (const row of rows) {
     const { SourceFile, ...tags } = row;
     exifCache.set(SourceFile, tags);
@@ -188,8 +202,8 @@ async function preloadExifChunk(existingPaths) {
     await mapWithConcurrency(
       existingPaths,
       async (mediaPath) => {
-        if (!exifCache.has(mediaPath)) {
-          exifCache.set(mediaPath, runExiftool(mediaPath, EXIF_TAG_ARGS));
+        if (!exifCache?.has(mediaPath)) {
+          exifCache?.set(mediaPath, runExiftool(mediaPath, EXIF_TAG_ARGS));
         }
       },
       DEFAULT_CONCURRENCY,
@@ -438,29 +452,43 @@ function formatMetadataPhotoTime(data, timezones, includeTimezone = true) {
   return formatUtcTime(photoTakenTimestamp, includeTimezone);
 }
 
+function getExifPhotoTakenDatetime(exif) {
+  if (!exif) {
+    return null;
+  }
+
+  if (exif.SubSecDateTimeOriginal) {
+    return exif.SubSecDateTimeOriginal;
+  }
+
+  if (exif.DateTimeOriginal) {
+    const offset = exif.OffsetTimeOriginal ?? exif.OffsetTime;
+    return offset ? `${exif.DateTimeOriginal}${offset}` : exif.DateTimeOriginal;
+  }
+
+  if (exif.ContentCreateDate) {
+    return exif.ContentCreateDate;
+  }
+
+  if (exif.CreateDate) {
+    return exif.CreateDate;
+  }
+
+  return null;
+}
+
 function formatExifPhotoTime(mediaPath, includeTimezone = true) {
   const exif = readExifTags(mediaPath);
   if (!exif) {
     return "not found";
   }
 
-  if (exif.SubSecDateTimeOriginal) {
-    return formatExifDatetimeString(exif.SubSecDateTimeOriginal, includeTimezone);
+  const value = getExifPhotoTakenDatetime(exif);
+  if (!value) {
+    return "not found";
   }
 
-  if (exif.DateTimeOriginal) {
-    const offset = exif.OffsetTimeOriginal ?? exif.OffsetTime;
-    if (offset) {
-      return formatExifDatetimeString(
-        `${exif.DateTimeOriginal}${offset}`,
-        includeTimezone,
-      );
-    }
-
-    return formatExifDatetimeString(exif.DateTimeOriginal, includeTimezone);
-  }
-
-  return "not found";
+  return formatExifDatetimeString(value, includeTimezone);
 }
 
 function parseExifDatetimeToEpoch(value) {
@@ -492,23 +520,12 @@ export function getPhotoTakenEpochFromExif(mediaPath) {
     return null;
   }
 
-  if (exif.SubSecDateTimeOriginal) {
-    const epoch = parseExifDatetimeToEpoch(exif.SubSecDateTimeOriginal);
-    if (epoch != null) {
-      return epoch;
-    }
+  const value = getExifPhotoTakenDatetime(exif);
+  if (!value) {
+    return null;
   }
 
-  if (exif.DateTimeOriginal) {
-    const offset = exif.OffsetTimeOriginal ?? exif.OffsetTime;
-    const value = offset
-      ? `${exif.DateTimeOriginal}${offset}`
-      : exif.DateTimeOriginal;
-
-    return parseExifDatetimeToEpoch(value);
-  }
-
-  return null;
+  return parseExifDatetimeToEpoch(value);
 }
 
 export function getPhotoTakenEpoch(data, mediaPath) {
@@ -565,13 +582,16 @@ function getExifPhotoTimeTimezone(mediaPath) {
     return null;
   }
 
-  if (exif.SubSecDateTimeOriginal) {
-    const match = String(exif.SubSecDateTimeOriginal).match(/([+-]\d{2}:\d{2})$/);
-    if (match) {
-      const offsetMinutes = parseOffsetString(match[1]);
-      if (offsetMinutes != null) {
-        return { source: "exif", value: formatUtcOffset(offsetMinutes) };
-      }
+  const value = getExifPhotoTakenDatetime(exif);
+  if (!value) {
+    return null;
+  }
+
+  const offsetMatch = String(value).match(/([+-]\d{2}:\d{2})$/);
+  if (offsetMatch) {
+    const offsetMinutes = parseOffsetString(offsetMatch[1]);
+    if (offsetMinutes != null) {
+      return { source: "exif", value: formatUtcOffset(offsetMinutes) };
     }
   }
 
