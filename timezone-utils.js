@@ -31,7 +31,11 @@ export function getCoords(data) {
 }
 
 export function parseDatetimeFromTitle(title) {
-  const match = title.match(DATETIME_TITLE_RE);
+  if (title == null || title === "") {
+    return null;
+  }
+
+  const match = String(title).match(DATETIME_TITLE_RE);
   if (!match) {
     return null;
   }
@@ -723,7 +727,7 @@ export function analyzeMediaFile(mediaPath) {
     exifTimezone: getExifPhotoTimeTimezone(mediaPath),
   };
   const { source: photoTakenSource, epoch: photoTakenEpoch } =
-    resolvePhotoTakenSelection({}, mediaPath, photoTaken);
+    resolvePhotoTakenSelection({ title: basename(mediaPath) }, mediaPath, photoTaken);
 
   return {
     timezones: {
