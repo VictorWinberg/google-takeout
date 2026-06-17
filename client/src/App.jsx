@@ -297,12 +297,15 @@ function canApply(file) {
   return file.photoTakenEpoch != null;
 }
 
-const DATE_MATCH_TOLERANCE_SECONDS = 60;
+const DATE_MISMATCH_THRESHOLD_SECONDS = 60;
 
 const FILE_DATE_MONTHS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
+
+const FILE_DATE_DISPLAY_RE =
+  /^(\d{1,2}) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d{4}), (\d{2}):(\d{2}):(\d{2})$/;
 
 function formatFileDateFromEpoch(epoch) {
   const date = new Date(epoch * 1000);
@@ -341,20 +344,73 @@ function mergeApplyResults(prevData, results) {
   };
 }
 
-function epochsMatchWithinTolerance(epoch, referenceEpoch) {
-  if (epoch == null || referenceEpoch == null) {
+function normalizeEpoch(value) {
+  if (value == null) {
+    return null;
+  }
+
+  const epoch = Number(value);
+  return Number.isFinite(epoch) ? epoch : null;
+}
+
+function parseDisplayDateTime(value) {
+  if (value == null || value === "") {
+    return null;
+  }
+
+  const match = String(value).match(FILE_DATE_DISPLAY_RE);
+  if (!match) {
+    return null;
+  }
+
+  const [, day, monthName, year, hour, minute, second] = match;
+  const month = FILE_DATE_MONTHS.indexOf(monthName);
+  if (month < 0) {
+    return null;
+  }
+
+  const date = new Date(
+    Number(year),
+    month,
+    Number(day),
+    Number(hour),
+    Number(minute),
+    Number(second),
+  );
+
+  return Number.isFinite(date.getTime())
+    ? Math.floor(date.getTime() / 1000)
+    : null;
+}
+
+function resolveComparableEpoch({ display, epoch }) {
+  return normalizeEpoch(epoch) ?? parseDisplayDateTime(display);
+}
+
+function datesMatchWithinThreshold(fileEpoch, referenceEpoch) {
+  if (fileEpoch == null || referenceEpoch == null) {
     return false;
   }
 
-  return Math.abs(epoch - referenceEpoch) <= DATE_MATCH_TOLERANCE_SECONDS;
+  return (
+    Math.abs(fileEpoch - referenceEpoch) <= DATE_MISMATCH_THRESHOLD_SECONDS
+  );
 }
 
 function fileDateMatchesReference({ display, epoch }, referenceDisplay, referenceEpoch) {
-  if (referenceDisplay != null && display === referenceDisplay) {
+  const fileComparableEpoch = resolveComparableEpoch({ display, epoch });
+  const referenceComparableEpoch = resolveComparableEpoch({
+    display: referenceDisplay,
+    epoch: referenceEpoch,
+  });
+
+  if (
+    datesMatchWithinThreshold(fileComparableEpoch, referenceComparableEpoch)
+  ) {
     return true;
   }
 
-  return epochsMatchWithinTolerance(epoch, referenceEpoch);
+  return referenceDisplay != null && display === referenceDisplay;
 }
 
 function getDateMismatch(file) {
@@ -539,7 +595,7 @@ function StatCard({ label, value }) {
 }
 
 const INITIAL_ROW_LIMIT = 200;
-const ROW_INCREMENT = 100;
+const ROW_INCREMENT = 500;
 
 function FileTable({
   title,
@@ -663,7 +719,7 @@ function FileTable({
               setVisibleCount((count) => Math.min(count + ROW_INCREMENT, files.length))
             }
           >
-            Show 100 more ({files.length - visibleCount} remaining)
+            Show 500 more ({files.length - visibleCount} remaining)
           </Button>
         </Box>
       )}
