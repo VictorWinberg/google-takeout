@@ -533,33 +533,20 @@ function getMetadataPhotoTakenEpoch(data) {
   return Number.isFinite(metadataEpoch) ? metadataEpoch : null;
 }
 
-export function getPhotoTakenSource(photoTaken) {
-  const hasMetadata = photoTaken?.metadata != null;
-  const hasExif = photoTaken?.exif != null;
-  const metadataHasTimezone = photoTaken?.metadataTimezone != null;
-  const exifHasTimezone = photoTaken?.exifTimezone != null;
-
-  if (metadataHasTimezone && hasMetadata) {
+export function getPhotoTakenSource(photoTaken, data = {}) {
+  if (getMetadataPhotoTakenEpoch(data) != null || photoTaken?.metadata != null) {
     return "metadata";
   }
 
-  if (exifHasTimezone && hasExif) {
+  if (photoTaken?.exif != null) {
     return "exif";
-  }
-
-  if (hasExif) {
-    return "exif";
-  }
-
-  if (hasMetadata) {
-    return "metadata";
   }
 
   return null;
 }
 
 export function resolvePhotoTakenSelection(data, mediaPath, photoTaken) {
-  const source = getPhotoTakenSource(photoTaken);
+  const source = getPhotoTakenSource(photoTaken, data);
   if (!source) {
     return { source: null, epoch: null };
   }

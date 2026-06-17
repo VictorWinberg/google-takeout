@@ -134,25 +134,12 @@ function getPhotoTakenSource(file) {
     return file.photoTakenSource;
   }
 
-  const hasMetadata = file.photoTaken?.metadata != null;
-  const hasExif = file.photoTaken?.exif != null;
-  const metadataHasTimezone = file.photoTaken?.metadataTimezone != null;
-  const exifHasTimezone = file.photoTaken?.exifTimezone != null;
-
-  if (metadataHasTimezone && hasMetadata) {
+  if (file.photoTaken?.metadata != null) {
     return "metadata";
   }
 
-  if (exifHasTimezone && hasExif) {
+  if (file.photoTaken?.exif != null) {
     return "exif";
-  }
-
-  if (hasExif) {
-    return "exif";
-  }
-
-  if (hasMetadata) {
-    return "metadata";
   }
 
   return null;
