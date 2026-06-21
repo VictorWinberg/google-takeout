@@ -8,7 +8,7 @@ export function getDateMismatch(file) {
   if (referenceDisplay == null && referenceEpoch == null) {
     return {
       hasDateMatch: false,
-      hasMismatch: false,
+      hasMismatch: true,
       createdMismatch: false,
       modifiedMismatch: false,
     };
