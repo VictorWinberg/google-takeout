@@ -157,8 +157,13 @@ function datesMatchWithinThreshold(fileEpoch, referenceEpoch) {
 }
 
 export function fileDateMatchesReference({ display, epoch }, referenceDisplay, referenceEpoch) {
-  if (referenceDisplay != null) {
-    return display != null && display !== "" && display === referenceDisplay;
+  if (
+    referenceDisplay != null &&
+    display != null &&
+    display !== "" &&
+    display === referenceDisplay
+  ) {
+    return true;
   }
 
   const fileComparableEpoch = resolveComparableEpoch({ display, epoch });
