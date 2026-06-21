@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import Alert from "@mui/material/Alert";
@@ -299,7 +299,20 @@ function OriginCell({ origin }) {
 }
 
 function canApply(file) {
-  return file.photoTakenEpoch != null;
+  return isValidEpochSeconds(file.photoTakenEpoch);
+}
+
+function isValidEpochSeconds(epoch) {
+  if (epoch == null || epoch === "") {
+    return false;
+  }
+
+  const seconds = Number(epoch);
+  if (!Number.isFinite(seconds)) {
+    return false;
+  }
+
+  return Number.isFinite(new Date(seconds * 1000).getTime());
 }
 
 const DATE_MISMATCH_THRESHOLD_SECONDS = 60;
@@ -313,7 +326,16 @@ const FILE_DATE_DISPLAY_RE =
   /^(\d{1,2}) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d{4}), (\d{2}):(\d{2}):(\d{2})$/;
 
 function formatFileDateFromEpoch(epoch) {
-  const date = new Date(epoch * 1000);
+  const seconds = Number(epoch);
+  if (!Number.isFinite(seconds)) {
+    return null;
+  }
+
+  const date = new Date(seconds * 1000);
+  if (!Number.isFinite(date.getTime())) {
+    return null;
+  }
+
   return `${date.getDate()} ${FILE_DATE_MONTHS[date.getMonth()]} ${date.getFullYear()}, ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}:${String(date.getSeconds()).padStart(2, "0")}`;
 }
 
@@ -335,6 +357,9 @@ function mergeApplyResults(prevData, results) {
       }
 
       const formatted = formatFileDateFromEpoch(epoch);
+      if (formatted == null) {
+        return file;
+      }
       return {
         ...file,
         fileDates: {
@@ -355,7 +380,11 @@ function normalizeEpoch(value) {
   }
 
   const epoch = Number(value);
-  return Number.isFinite(epoch) ? epoch : null;
+  if (!Number.isFinite(epoch)) {
+    return null;
+  }
+
+  return Number.isFinite(new Date(epoch * 1000).getTime()) ? epoch : null;
 }
 
 function parseDisplayDateTime(value) {
@@ -383,9 +412,22 @@ function parseDisplayDateTime(value) {
     Number(second),
   );
 
-  return Number.isFinite(date.getTime())
-    ? Math.floor(date.getTime() / 1000)
-    : null;
+  if (!Number.isFinite(date.getTime())) {
+    return null;
+  }
+
+  if (
+    date.getFullYear() !== Number(year) ||
+    date.getMonth() !== month ||
+    date.getDate() !== Number(day) ||
+    date.getHours() !== Number(hour) ||
+    date.getMinutes() !== Number(minute) ||
+    date.getSeconds() !== Number(second)
+  ) {
+    return null;
+  }
+
+  return Math.floor(date.getTime() / 1000);
 }
 
 function resolveComparableEpoch({ display, epoch }) {
@@ -652,10 +694,25 @@ function FileTable({
   const [visibleCount, setVisibleCount] = useState(INITIAL_ROW_LIMIT);
   const visibleFiles = files.slice(0, visibleCount);
   const hasMoreRows = visibleCount < files.length;
+  const selectionAnchorRef = useRef(null);
 
   useEffect(() => {
     setVisibleCount(INITIAL_ROW_LIMIT);
   }, [files]);
+
+  function handleToggleSelected(file, event) {
+    if (!canApply(file)) {
+      return;
+    }
+
+    onToggleSelected({
+      path: file.path,
+      shiftKey: event.shiftKey,
+      visibleFiles,
+      anchorPath: selectionAnchorRef.current,
+    });
+    selectionAnchorRef.current = file.path;
+  }
 
   const selectableFiles = files.filter(canApply);
   const allSelectableSelected =
@@ -734,8 +791,11 @@ function FileTable({
                       <Checkbox
                         checked={isSelected}
                         disabled={!applicable}
-                        onClick={(event) => event.stopPropagation()}
-                        onChange={() => onToggleSelected(file.path)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          event.preventDefault();
+                          handleToggleSelected(file, event);
+                        }}
                         inputProps={{ "aria-label": `Select ${file.path}` }}
                       />
                     </TableCell>
@@ -885,14 +945,36 @@ export default function App() {
     setSortDir("asc");
   }
 
-  function toggleSelected(path) {
+  function toggleSelected({ path, shiftKey = false, visibleFiles = null, anchorPath = null }) {
     setSelected((current) => {
       const next = new Set(current);
+
+      if (shiftKey && anchorPath != null && visibleFiles?.length) {
+        const paths = visibleFiles.map((file) => file.path);
+        const start = paths.indexOf(anchorPath);
+        const end = paths.indexOf(path);
+
+        if (start !== -1 && end !== -1) {
+          const from = Math.min(start, end);
+          const to = Math.max(start, end);
+
+          for (let index = from; index <= to; index += 1) {
+            const file = visibleFiles[index];
+            if (canApply(file)) {
+              next.add(file.path);
+            }
+          }
+
+          return next;
+        }
+      }
+
       if (next.has(path)) {
         next.delete(path);
       } else {
         next.add(path);
       }
+
       return next;
     });
   }

@@ -4,6 +4,7 @@ import { basename } from "node:path";
 import { promisify } from "node:util";
 import { find } from "geo-tz";
 import { DEFAULT_CONCURRENCY, mapWithConcurrency } from "./lib/concurrency.js";
+import { normalizeEpochSeconds } from "./lib/epoch-utils.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -683,14 +684,15 @@ export function resolvePhotoTakenSelection(
     return { source: null, epoch: null };
   }
 
-  const epoch =
+  const rawEpoch =
     source === "filename"
       ? getPhotoTakenEpochFromFilename(data)
       : source === "exif"
         ? getPhotoTakenEpochFromExif(mediaPath)
         : getMetadataPhotoTakenEpoch(data);
 
-  return { source, epoch };
+  const epoch = normalizeEpochSeconds(rawEpoch);
+  return { source: epoch != null ? source : null, epoch };
 }
 
 export function getPhotoTakenEpoch(data, mediaPath) {
