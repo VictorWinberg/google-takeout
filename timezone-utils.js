@@ -10,11 +10,14 @@ const execFileAsync = promisify(execFile);
 
 // Google Photos: 20250102_152300
 // Prefixed: instagram_20250102_152300, instagram_202501021523, instagram_20250102152300
+// Pixlr: pixlr_20250209205832404 (optional sub-second digits)
+// WhatsApp: IMG-20250830-WA0003 (date only)
 const DATETIME_TITLE_PATTERNS = [
   /^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})/,
   /_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})(?:\.|[^0-9]|$)/,
-  /_(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(?:\.|[^0-9]|$)/,
+  /_(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})\d*(?:\.|[^0-9]|$)/,
   /_(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(?:\.|[^0-9]|$)/,
+  /IMG-(\d{4})(\d{2})(\d{2})-/i,
 ];
 const EXIF_DATETIME_RE =
   /^(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:([+-]\d{2}:\d{2}))?$/;
@@ -75,7 +78,7 @@ export function parseDatetimeFromTitle(title) {
       continue;
     }
 
-    const [, year, month, day, hour, minute, second = "0"] = match;
+    const [, year, month, day, hour = "0", minute = "0", second = "0"] = match;
     const local = {
       year: Number(year),
       month: Number(month),

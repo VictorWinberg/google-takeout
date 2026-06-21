@@ -342,6 +342,8 @@ function ManualPhotoTakenCell({ file, highlighted, onManualDateChange, onSelect 
       >
         <StaticDateTimePicker
           ampm={false}
+          views={["year", "month", "day", "hours", "minutes", "seconds"]}
+          format="D MMM YYYY, HH:mm:ss"
           value={pickerValue}
           onChange={(newValue) => {
             onManualDateChange(file.path, newValue);
