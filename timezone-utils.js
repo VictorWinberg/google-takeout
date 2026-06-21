@@ -2,6 +2,8 @@ export { getCoords, getTimezoneFromCoords } from "./lib/coords.js";
 export {
   parseDatetimeFromTitle,
   parseExifLocalDateTime,
+  isDateOnlyFilenameTitle,
+  localDateTimePartsToEpoch,
   EXIF_DATETIME_RE,
   MONTHS,
 } from "./lib/datetime-parsing.js";
