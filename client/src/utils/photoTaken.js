@@ -1,6 +1,7 @@
 import {
   formatFileDateFromEpoch,
   isValidEpochSeconds,
+  localEpochFromTimezoneWallClock,
   parseDisplayDateTime,
 } from "./dates.js";
 
@@ -24,6 +25,22 @@ function getPhotoTakenDisplayForSource(file, source) {
   return null;
 }
 
+function getTimezoneForApplySource(file, source) {
+  if (source === "filename") {
+    return getFilenameTimezoneInfo(file)?.value ?? null;
+  }
+
+  if (source === "metadata") {
+    return getMetadataTimezoneInfo(file)?.value ?? null;
+  }
+
+  if (source === "exif") {
+    return getExifTimezoneInfo(file)?.value ?? null;
+  }
+
+  return null;
+}
+
 export function getPhotoTakenEpochForSource(file, source) {
   const display = getPhotoTakenDisplayForSource(file, source);
   const parsedFromDisplay = parseDisplayDateTime(display);
@@ -40,8 +57,19 @@ export function getPhotoTakenEpochForSource(file, source) {
     return parsedFromDisplay;
   }
 
+  const timeZone = getTimezoneForApplySource(file, source);
+  if (timeZone && isValidEpochSeconds(storedEpoch)) {
+    const applyEpoch = localEpochFromTimezoneWallClock(storedEpoch, timeZone);
+    if (applyEpoch != null) {
+      return applyEpoch;
+    }
+  }
+
   if (isValidEpochSeconds(storedEpoch)) {
-    return storedEpoch;
+    const formattedStored = formatFileDateFromEpoch(storedEpoch);
+    if (formattedStored === display) {
+      return storedEpoch;
+    }
   }
 
   return null;
