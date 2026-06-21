@@ -785,6 +785,16 @@ function buildPhotoTakenSummary(data, mediaPath, timezones) {
   };
 }
 
+function buildPhotoTakenEpochs(data, mediaPath) {
+  return {
+    filename: normalizeEpochSeconds(getPhotoTakenEpochFromFilename(data)),
+    metadata: normalizeEpochSeconds(getMetadataPhotoTakenEpoch(data)),
+    exif: normalizeEpochSeconds(
+      mediaPath ? getPhotoTakenEpochFromExif(mediaPath) : null,
+    ),
+  };
+}
+
 export function analyzePhoto(data, { mediaPath } = {}) {
   const coordinates = resolveTimezoneFromCoordinates(data);
   const filename = resolveTimezoneFromFilename(data);
@@ -803,7 +813,7 @@ export function analyzePhoto(data, { mediaPath } = {}) {
     photoTaken,
     photoTakenSource,
     photoTakenEpoch,
-    photoTakenExifEpoch: mediaPath ? getPhotoTakenEpochFromExif(mediaPath) : null,
+    photoTakenEpochs: buildPhotoTakenEpochs(data, mediaPath),
   };
 }
 
@@ -838,7 +848,10 @@ export function analyzeMediaFile(mediaPath) {
     photoTaken,
     photoTakenSource,
     photoTakenEpoch,
-    photoTakenExifEpoch: getPhotoTakenEpochFromExif(mediaPath),
+    photoTakenEpochs: buildPhotoTakenEpochs(
+      { title: basename(mediaPath) },
+      mediaPath,
+    ),
   };
 }
 

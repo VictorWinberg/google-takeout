@@ -58,15 +58,25 @@ app.get("/api/files", async (_req, res) => {
 
 app.post("/api/apply", async (req, res) => {
   const paths = req.body?.paths;
+  const photoTakenEpochs = req.body?.photoTakenEpochs;
 
   if (!Array.isArray(paths) || paths.length === 0) {
     res.status(400).json({ error: "paths must be a non-empty array" });
     return;
   }
 
+  if (
+    photoTakenEpochs != null &&
+    (typeof photoTakenEpochs !== "object" || Array.isArray(photoTakenEpochs))
+  ) {
+    res.status(400).json({ error: "photoTakenEpochs must be an object" });
+    return;
+  }
+
   try {
     const result = await applyPhotoTakenTimes({
       paths,
+      photoTakenEpochs: photoTakenEpochs ?? {},
       targetRoot: TARGET_ROOT,
       takeoutRoot: TAKEOUT_ROOT,
     });

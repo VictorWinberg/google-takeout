@@ -131,6 +131,27 @@ const COLUMNS = [
   { key: "photoTakenExif", label: "Photo taken (exif)" },
 ];
 
+function getPhotoTakenEpochForSource(file, source) {
+  const epoch = file.photoTakenEpochs?.[source];
+  if (isValidEpochSeconds(epoch)) {
+    return epoch;
+  }
+
+  if (source === "filename") {
+    return parseDisplayDateTime(file.photoTaken?.filename);
+  }
+
+  if (source === "metadata") {
+    return parseDisplayDateTime(file.photoTaken?.metadata);
+  }
+
+  if (source === "exif") {
+    return parseDisplayDateTime(file.photoTaken?.exif);
+  }
+
+  return null;
+}
+
 function getPhotoTakenSource(file) {
   if (file.photoTakenSource) {
     return file.photoTakenSource;
@@ -153,21 +174,21 @@ function getChosenPhotoTakenReference(file) {
   if (source === "filename") {
     return {
       display: file.photoTaken?.filename ?? null,
-      epoch: file.photoTakenEpoch ?? null,
+      epoch: getPhotoTakenEpochForSource(file, "filename"),
     };
   }
 
   if (source === "metadata") {
     return {
       display: file.photoTaken?.metadata ?? null,
-      epoch: file.photoTakenEpoch ?? null,
+      epoch: getPhotoTakenEpochForSource(file, "metadata"),
     };
   }
 
   if (source === "exif") {
     return {
       display: file.photoTaken?.exif ?? null,
-      epoch: file.photoTakenEpoch ?? null,
+      epoch: getPhotoTakenEpochForSource(file, "exif"),
     };
   }
 
@@ -216,10 +237,18 @@ function getExifTimezoneInfo(file) {
   return { source: "exif", value: file.timezones.exif };
 }
 
-function PhotoTakenCell({ value, timezoneInfo, highlighted = false }) {
+function PhotoTakenCell({
+  value,
+  timezoneInfo,
+  highlighted = false,
+  selectable = false,
+  onSelect,
+}) {
   if (value == null || value === "") {
     return <CellValue value={null} />;
   }
+
+  const canSelect = selectable && !highlighted && onSelect;
 
   const highlightSx = highlighted
     ? {
@@ -232,41 +261,51 @@ function PhotoTakenCell({ value, timezoneInfo, highlighted = false }) {
       }
     : {};
 
-  if (!timezoneInfo) {
-    if (highlighted) {
-      return (
-        <Typography variant="body2" sx={highlightSx}>
-          {value}
-        </Typography>
-      );
-    }
+  const tooltipTitle = highlighted
+    ? `Used for apply · ${timezoneInfo ? formatPhotoTakenTimezone(timezoneInfo) : value}`
+    : canSelect
+      ? `Click to use for apply${timezoneInfo ? ` · ${formatPhotoTakenTimezone(timezoneInfo)}` : ""}`
+      : timezoneInfo
+        ? formatPhotoTakenTimezone(timezoneInfo)
+        : value;
 
+  const content = (
+    <Box
+      component="span"
+      onClick={(event) => {
+        event.stopPropagation();
+        if (canSelect) {
+          onSelect();
+        }
+      }}
+      sx={{
+        display: "inline-block",
+        cursor: canSelect ? "pointer" : highlighted ? "default" : "help",
+        borderBottom: highlighted || canSelect ? "none" : "1px dotted",
+        borderColor: "text.secondary",
+        ...highlightSx,
+        ...(canSelect && {
+          "&:hover": {
+            color: "primary.main",
+            bgcolor: (theme) => alpha(theme.palette.primary.main, 0.08),
+            px: 0.75,
+            py: 0.25,
+            borderRadius: 0.5,
+          },
+        }),
+      }}
+    >
+      {value}
+    </Box>
+  );
+
+  if (!timezoneInfo && !canSelect && !highlighted) {
     return <CellValue value={value} />;
   }
 
   return (
-    <Tooltip
-      title={
-        highlighted
-          ? `Used for apply · ${formatPhotoTakenTimezone(timezoneInfo)}`
-          : formatPhotoTakenTimezone(timezoneInfo)
-      }
-      placement="top"
-      arrow
-    >
-      <Box
-        component="span"
-        onClick={(event) => event.stopPropagation()}
-        sx={{
-          display: "inline-block",
-          cursor: "help",
-          borderBottom: highlighted ? "none" : "1px dotted",
-          borderColor: "text.secondary",
-          ...highlightSx,
-        }}
-      >
-        {value}
-      </Box>
+    <Tooltip title={tooltipTitle} placement="top" arrow>
+      {content}
     </Tooltip>
   );
 }
@@ -521,7 +560,7 @@ function getCellValue(file, key) {
   }
 }
 
-function renderColumnCell(file, key) {
+function renderColumnCell(file, key, { onPhotoTakenSourceSelect } = {}) {
   const dateMismatch = getDateMismatch(file);
   const usedSource = getPhotoTakenSource(file);
 
@@ -597,6 +636,8 @@ function renderColumnCell(file, key) {
         value={file.photoTaken?.filename}
         timezoneInfo={getFilenameTimezoneInfo(file)}
         highlighted={usedSource === "filename"}
+        selectable={isValidEpochSeconds(getPhotoTakenEpochForSource(file, "filename"))}
+        onSelect={() => onPhotoTakenSourceSelect?.(file.path, "filename")}
       />
     );
   }
@@ -607,6 +648,8 @@ function renderColumnCell(file, key) {
         value={file.photoTaken?.metadata}
         timezoneInfo={getMetadataTimezoneInfo(file)}
         highlighted={usedSource === "metadata"}
+        selectable={isValidEpochSeconds(getPhotoTakenEpochForSource(file, "metadata"))}
+        onSelect={() => onPhotoTakenSourceSelect?.(file.path, "metadata")}
       />
     );
   }
@@ -617,6 +660,8 @@ function renderColumnCell(file, key) {
         value={file.photoTaken?.exif}
         timezoneInfo={getExifTimezoneInfo(file)}
         highlighted={usedSource === "exif"}
+        selectable={isValidEpochSeconds(getPhotoTakenEpochForSource(file, "exif"))}
+        onSelect={() => onPhotoTakenSourceSelect?.(file.path, "exif")}
       />
     );
   }
@@ -689,6 +734,7 @@ function FileTable({
   onToggleSelected,
   onToggleSelectAll,
   onPreview,
+  onPhotoTakenSourceSelect,
   highlightMismatch = false,
 }) {
   const [visibleCount, setVisibleCount] = useState(INITIAL_ROW_LIMIT);
@@ -801,7 +847,9 @@ function FileTable({
                     </TableCell>
                     {COLUMNS.map((column) => (
                       <TableCell key={column.key}>
-                        {renderColumnCell(file, column.key)}
+                        {renderColumnCell(file, column.key, {
+                          onPhotoTakenSourceSelect,
+                        })}
                       </TableCell>
                     ))}
                   </TableRow>
@@ -1019,6 +1067,34 @@ export default function App() {
     });
   }
 
+  function selectPhotoTakenSource(path, source) {
+    setData((prev) => {
+      if (!prev?.files) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        files: prev.files.map((file) => {
+          if (file.path !== path) {
+            return file;
+          }
+
+          const epoch = getPhotoTakenEpochForSource(file, source);
+          if (!isValidEpochSeconds(epoch)) {
+            return file;
+          }
+
+          return {
+            ...file,
+            photoTakenSource: source,
+            photoTakenEpoch: epoch,
+          };
+        }),
+      };
+    });
+  }
+
   async function applySelected() {
     const paths = [...selected];
     if (paths.length === 0) return;
@@ -1026,11 +1102,20 @@ export default function App() {
     setApplying(true);
     setApplyNotice(null);
 
+    const photoTakenEpochs = Object.fromEntries(
+      paths
+        .map((path) => {
+          const file = data?.files?.find((entry) => entry.path === path);
+          return [path, file?.photoTakenEpoch];
+        })
+        .filter(([, epoch]) => isValidEpochSeconds(epoch)),
+    );
+
     try {
       const response = await fetch("/api/apply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paths }),
+        body: JSON.stringify({ paths, photoTakenEpochs }),
       });
 
       const body = await response.json().catch(() => ({}));
@@ -1080,8 +1165,9 @@ export default function App() {
           </Typography>
           <Typography color="text.secondary">
             All media in <Box component="code">data/target</Box>, matched against
-            takeout metadata and photo times from each source. Select files and
-            apply to set Date Created and Date Modified.
+            takeout metadata and photo times from each source. Click a photo taken
+            date to choose which source to use, then select files and apply to set
+            Date Created and Date Modified.
           </Typography>
         </Box>
 
@@ -1186,6 +1272,7 @@ export default function App() {
               onToggleSelected={toggleSelected}
               onToggleSelectAll={toggleSelectAllInTable}
               onPreview={setPreviewPath}
+              onPhotoTakenSourceSelect={selectPhotoTakenSource}
               highlightMismatch
             />
             <FileTable
@@ -1198,6 +1285,7 @@ export default function App() {
               onToggleSelected={toggleSelected}
               onToggleSelectAll={toggleSelectAllInTable}
               onPreview={setPreviewPath}
+              onPhotoTakenSourceSelect={selectPhotoTakenSource}
             />
           </Stack>
         )}
