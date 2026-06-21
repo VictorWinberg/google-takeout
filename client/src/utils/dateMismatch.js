@@ -6,7 +6,12 @@ export function getDateMismatch(file) {
     getChosenPhotoTakenReference(file);
 
   if (referenceDisplay == null && referenceEpoch == null) {
-    return { hasMismatch: false, createdMismatch: false, modifiedMismatch: false };
+    return {
+      hasDateMatch: false,
+      hasMismatch: false,
+      createdMismatch: false,
+      modifiedMismatch: false,
+    };
   }
 
   const createdMatches = fileDateMatchesReference(
@@ -26,8 +31,11 @@ export function getDateMismatch(file) {
     referenceEpoch,
   );
 
+  const hasDateMatch = createdMatches && modifiedMatches;
+
   return {
-    hasMismatch: !(createdMatches && modifiedMatches),
+    hasDateMatch,
+    hasMismatch: !hasDateMatch,
     createdMismatch: !createdMatches,
     modifiedMismatch: !modifiedMatches,
   };

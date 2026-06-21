@@ -126,7 +126,7 @@ export default function App() {
   );
 
   const matchedFiles = useMemo(
-    () => filteredFiles.filter((file) => !getDateMismatch(file).hasMismatch),
+    () => filteredFiles.filter((file) => getDateMismatch(file).hasDateMatch),
     [filteredFiles],
   );
 
@@ -391,7 +391,7 @@ export default function App() {
             />
             <StatCard
               label="Dates matched"
-              value={data.files.filter((file) => !getDateMismatch(file).hasMismatch).length}
+              value={data.files.filter((file) => getDateMismatch(file).hasDateMatch).length}
             />
           </Stack>
         )}

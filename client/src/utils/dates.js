@@ -106,17 +106,15 @@ function datesMatchWithinThreshold(fileEpoch, referenceEpoch) {
 }
 
 export function fileDateMatchesReference({ display, epoch }, referenceDisplay, referenceEpoch) {
+  if (referenceDisplay != null) {
+    return display != null && display !== "" && display === referenceDisplay;
+  }
+
   const fileComparableEpoch = resolveComparableEpoch({ display, epoch });
   const referenceComparableEpoch = resolveComparableEpoch({
     display: referenceDisplay,
     epoch: referenceEpoch,
   });
 
-  if (
-    datesMatchWithinThreshold(fileComparableEpoch, referenceComparableEpoch)
-  ) {
-    return true;
-  }
-
-  return referenceDisplay != null && display === referenceDisplay;
+  return datesMatchWithinThreshold(fileComparableEpoch, referenceComparableEpoch);
 }
