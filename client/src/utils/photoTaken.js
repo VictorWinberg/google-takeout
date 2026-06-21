@@ -1,62 +1,84 @@
-import { isValidEpochSeconds, parseDisplayDateTime } from "./dates.js";
+import {
+  formatFileDateFromEpoch,
+  isValidEpochSeconds,
+  parseDisplayDateTime,
+} from "./dates.js";
 
-export function getPhotoTakenEpochForSource(file, source) {
-  const epoch = file.photoTakenEpochs?.[source];
-  if (isValidEpochSeconds(epoch)) {
-    return epoch;
-  }
-
+function getPhotoTakenDisplayForSource(file, source) {
   if (source === "filename") {
-    return parseDisplayDateTime(file.photoTaken?.filename);
+    return file.photoTaken?.filename ?? null;
   }
 
   if (source === "metadata") {
-    return parseDisplayDateTime(file.photoTaken?.metadata);
+    return file.photoTaken?.metadata ?? null;
   }
 
   if (source === "exif") {
-    return parseDisplayDateTime(file.photoTaken?.exif);
+    return file.photoTaken?.exif ?? null;
   }
 
   if (source === "manual") {
-    return parseDisplayDateTime(file.photoTaken?.manual);
+    return file.photoTaken?.manual ?? null;
+  }
+
+  return null;
+}
+
+export function getPhotoTakenEpochForSource(file, source) {
+  const display = getPhotoTakenDisplayForSource(file, source);
+  const parsedFromDisplay = parseDisplayDateTime(display);
+  const storedEpoch = file.photoTakenEpochs?.[source];
+
+  if (parsedFromDisplay != null) {
+    if (isValidEpochSeconds(storedEpoch)) {
+      const formattedStored = formatFileDateFromEpoch(storedEpoch);
+      if (formattedStored === display) {
+        return storedEpoch;
+      }
+    }
+
+    return parsedFromDisplay;
+  }
+
+  if (isValidEpochSeconds(storedEpoch)) {
+    return storedEpoch;
   }
 
   return null;
 }
 
 export function getDefaultPhotoTakenSelection(file) {
-  if (
-    file.photoTaken?.filename != null &&
-    isValidEpochSeconds(file.photoTakenEpochs?.filename)
-  ) {
-    return {
-      source: "filename",
-      epoch: file.photoTakenEpochs.filename,
-    };
+  if (file.photoTaken?.filename != null) {
+    const epoch = getPhotoTakenEpochForSource(file, "filename");
+    if (isValidEpochSeconds(epoch)) {
+      return { source: "filename", epoch };
+    }
   }
 
-  if (
-    file.photoTaken?.metadata != null &&
-    isValidEpochSeconds(file.photoTakenEpochs?.metadata)
-  ) {
-    return {
-      source: "metadata",
-      epoch: file.photoTakenEpochs.metadata,
-    };
+  if (file.photoTaken?.metadata != null) {
+    const epoch = getPhotoTakenEpochForSource(file, "metadata");
+    if (isValidEpochSeconds(epoch)) {
+      return { source: "metadata", epoch };
+    }
   }
 
-  if (
-    file.photoTaken?.exif != null &&
-    isValidEpochSeconds(file.photoTakenEpochs?.exif)
-  ) {
-    return {
-      source: "exif",
-      epoch: file.photoTakenEpochs.exif,
-    };
+  if (file.photoTaken?.exif != null) {
+    const epoch = getPhotoTakenEpochForSource(file, "exif");
+    if (isValidEpochSeconds(epoch)) {
+      return { source: "exif", epoch };
+    }
   }
 
   return { source: null, epoch: null };
+}
+
+export function getPhotoTakenEpoch(file) {
+  const source = getPhotoTakenSource(file);
+  if (source) {
+    return getPhotoTakenEpochForSource(file, source);
+  }
+
+  return isValidEpochSeconds(file.photoTakenEpoch) ? file.photoTakenEpoch : null;
 }
 
 export function getPhotoTakenSource(file) {
@@ -152,5 +174,5 @@ export function getExifTimezoneInfo(file) {
 }
 
 export function canApply(file) {
-  return isValidEpochSeconds(file.photoTakenEpoch);
+  return isValidEpochSeconds(getPhotoTakenEpoch(file));
 }

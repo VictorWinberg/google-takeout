@@ -27,6 +27,7 @@ import { getMediaKind } from "./utils/media.js";
 import {
   canApply,
   getDefaultPhotoTakenSelection,
+  getPhotoTakenEpoch,
   getPhotoTakenEpochForSource,
 } from "./utils/photoTaken.js";
 
@@ -316,9 +317,13 @@ export default function App() {
       paths
         .map((path) => {
           const file = data?.files?.find((entry) => entry.path === path);
-          return [path, file?.photoTakenEpoch];
+          if (!file) {
+            return null;
+          }
+
+          return [path, getPhotoTakenEpoch(file)];
         })
-        .filter(([, epoch]) => isValidEpochSeconds(epoch)),
+        .filter((entry) => entry && isValidEpochSeconds(entry[1])),
     );
 
     try {

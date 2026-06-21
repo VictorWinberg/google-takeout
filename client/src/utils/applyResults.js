@@ -1,4 +1,5 @@
 import { formatFileDateFromEpoch } from "./dates.js";
+import { getChosenPhotoTakenReference } from "./photoTaken.js";
 
 export function mergeApplyResults(prevData, results) {
   const appliedByPath = new Map(
@@ -21,12 +22,17 @@ export function mergeApplyResults(prevData, results) {
       if (formatted == null) {
         return file;
       }
+
+      const { display: referenceDisplay } = getChosenPhotoTakenReference(file);
+      const display = referenceDisplay ?? formatted;
+
       return {
         ...file,
+        photoTakenEpoch: epoch,
         fileDates: {
           ...file.fileDates,
-          createdAt: formatted,
-          modifiedAt: formatted,
+          createdAt: display,
+          modifiedAt: display,
           createdAtEpoch: epoch,
           modifiedAtEpoch: epoch,
         },
