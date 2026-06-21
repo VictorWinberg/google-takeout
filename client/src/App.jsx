@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import dayjs from "dayjs";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -129,6 +131,7 @@ const COLUMNS = [
   { key: "photoTakenFilename", label: "Photo taken (filename)" },
   { key: "photoTakenMetadata", label: "Photo taken (metadata)" },
   { key: "photoTakenExif", label: "Photo taken (exif)" },
+  { key: "photoTakenManual", label: "Photo taken (manual)" },
 ];
 
 function getPhotoTakenEpochForSource(file, source) {
@@ -149,7 +152,45 @@ function getPhotoTakenEpochForSource(file, source) {
     return parseDisplayDateTime(file.photoTaken?.exif);
   }
 
+  if (source === "manual") {
+    return parseDisplayDateTime(file.photoTaken?.manual);
+  }
+
   return null;
+}
+
+function getDefaultPhotoTakenSelection(file) {
+  if (
+    file.photoTaken?.filename != null &&
+    isValidEpochSeconds(file.photoTakenEpochs?.filename)
+  ) {
+    return {
+      source: "filename",
+      epoch: file.photoTakenEpochs.filename,
+    };
+  }
+
+  if (
+    file.photoTaken?.metadata != null &&
+    isValidEpochSeconds(file.photoTakenEpochs?.metadata)
+  ) {
+    return {
+      source: "metadata",
+      epoch: file.photoTakenEpochs.metadata,
+    };
+  }
+
+  if (
+    file.photoTaken?.exif != null &&
+    isValidEpochSeconds(file.photoTakenEpochs?.exif)
+  ) {
+    return {
+      source: "exif",
+      epoch: file.photoTakenEpochs.exif,
+    };
+  }
+
+  return { source: null, epoch: null };
 }
 
 function getPhotoTakenSource(file) {
@@ -189,6 +230,13 @@ function getChosenPhotoTakenReference(file) {
     return {
       display: file.photoTaken?.exif ?? null,
       epoch: getPhotoTakenEpochForSource(file, "exif"),
+    };
+  }
+
+  if (source === "manual") {
+    return {
+      display: file.photoTaken?.manual ?? null,
+      epoch: getPhotoTakenEpochForSource(file, "manual"),
     };
   }
 
@@ -235,6 +283,47 @@ function getExifTimezoneInfo(file) {
   }
 
   return { source: "exif", value: file.timezones.exif };
+}
+
+function ManualPhotoTakenCell({ file, highlighted, onManualDateChange, onSelect }) {
+  const manualEpoch = getPhotoTakenEpochForSource(file, "manual");
+  const pickerValue = manualEpoch != null ? dayjs.unix(manualEpoch) : null;
+
+  return (
+    <Box onClick={(event) => event.stopPropagation()} sx={{ minWidth: 220 }}>
+      <DateTimePicker
+        value={pickerValue}
+        onChange={(newValue) => onManualDateChange(file.path, newValue)}
+        onOpen={() => {
+          if (manualEpoch != null && !highlighted) {
+            onSelect?.();
+          }
+        }}
+        format="D MMM YYYY, HH:mm:ss"
+        slotProps={{
+          field: { clearable: true },
+          textField: {
+            size: "small",
+            fullWidth: true,
+            placeholder: "Set date…",
+            inputProps: {
+              "aria-label": `Manual photo taken time for ${file.path}`,
+            },
+            sx: highlighted
+              ? {
+                  "& .MuiInputBase-input": {
+                    color: "primary.main",
+                    fontWeight: 700,
+                  },
+                  bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1),
+                  borderRadius: 0.5,
+                }
+              : undefined,
+          },
+        }}
+      />
+    </Box>
+  );
 }
 
 function PhotoTakenCell({
@@ -551,6 +640,8 @@ function getCellValue(file, key) {
       return file.photoTaken?.metadata;
     case "photoTakenExif":
       return file.photoTaken?.exif;
+    case "photoTakenManual":
+      return file.photoTaken?.manual;
     case "createdAt":
       return file.fileDates?.createdAt;
     case "modifiedAt":
@@ -560,7 +651,7 @@ function getCellValue(file, key) {
   }
 }
 
-function renderColumnCell(file, key, { onPhotoTakenSourceSelect } = {}) {
+function renderColumnCell(file, key, { onPhotoTakenSourceSelect, onManualDateChange } = {}) {
   const dateMismatch = getDateMismatch(file);
   const usedSource = getPhotoTakenSource(file);
 
@@ -666,6 +757,17 @@ function renderColumnCell(file, key, { onPhotoTakenSourceSelect } = {}) {
     );
   }
 
+  if (key === "photoTakenManual") {
+    return (
+      <ManualPhotoTakenCell
+        file={file}
+        highlighted={usedSource === "manual"}
+        onManualDateChange={onManualDateChange}
+        onSelect={() => onPhotoTakenSourceSelect?.(file.path, "manual")}
+      />
+    );
+  }
+
   if (key === "createdAt" && dateMismatch.createdMismatch) {
     return (
       <Typography variant="body2" color="warning.main" fontWeight={600}>
@@ -699,6 +801,8 @@ function sortValue(file, key) {
       return file.photoTaken?.metadata ?? "";
     case "photoTakenExif":
       return file.photoTaken?.exif ?? "";
+    case "photoTakenManual":
+      return file.photoTaken?.manual ?? "";
     case "createdAt":
       return file.fileDates?.createdAtEpoch ?? "";
     case "modifiedAt":
@@ -735,6 +839,7 @@ function FileTable({
   onToggleSelectAll,
   onPreview,
   onPhotoTakenSourceSelect,
+  onManualDateChange,
   highlightMismatch = false,
 }) {
   const [visibleCount, setVisibleCount] = useState(INITIAL_ROW_LIMIT);
@@ -774,7 +879,7 @@ function FileTable({
         {title} ({files.length})
       </Typography>
       <TableContainer component={Paper} variant="outlined" sx={{ overflowX: "auto" }}>
-        <Table size="small" stickyHeader sx={{ minWidth: 960 }}>
+        <Table size="small" stickyHeader sx={{ minWidth: 1180 }}>
           <TableHead>
             <TableRow>
               <TableCell padding="checkbox">
@@ -849,6 +954,7 @@ function FileTable({
                       <TableCell key={column.key}>
                         {renderColumnCell(file, column.key, {
                           onPhotoTakenSourceSelect,
+                          onManualDateChange,
                         })}
                       </TableCell>
                     ))}
@@ -941,6 +1047,7 @@ export default function App() {
           file.photoTaken?.filename,
           file.photoTaken?.metadata,
           file.photoTaken?.exif,
+          file.photoTaken?.manual,
           file.fileDates?.createdAt,
           file.fileDates?.modifiedAt,
         ]
@@ -1067,6 +1174,60 @@ export default function App() {
     });
   }
 
+  function setManualPhotoTaken(path, dayjsValue) {
+    setData((prev) => {
+      if (!prev?.files) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        files: prev.files.map((file) => {
+          if (file.path !== path) {
+            return file;
+          }
+
+          if (dayjsValue == null || !dayjsValue.isValid()) {
+            const { source, epoch } = getDefaultPhotoTakenSelection(file);
+            const nextPhotoTaken = { ...file.photoTaken };
+            delete nextPhotoTaken.manual;
+
+            const nextEpochs = { ...file.photoTakenEpochs };
+            delete nextEpochs.manual;
+
+            return {
+              ...file,
+              photoTakenSource: source,
+              photoTakenEpoch: epoch,
+              photoTaken: Object.keys(nextPhotoTaken).length > 0 ? nextPhotoTaken : null,
+              photoTakenEpochs: Object.keys(nextEpochs).length > 0 ? nextEpochs : null,
+            };
+          }
+
+          const epoch = Math.floor(dayjsValue.valueOf() / 1000);
+          const display = formatFileDateFromEpoch(epoch);
+          if (!isValidEpochSeconds(epoch) || display == null) {
+            return file;
+          }
+
+          return {
+            ...file,
+            photoTakenSource: "manual",
+            photoTakenEpoch: epoch,
+            photoTaken: {
+              ...file.photoTaken,
+              manual: display,
+            },
+            photoTakenEpochs: {
+              ...file.photoTakenEpochs,
+              manual: epoch,
+            },
+          };
+        }),
+      };
+    });
+  }
+
   function selectPhotoTakenSource(path, source) {
     setData((prev) => {
       if (!prev?.files) {
@@ -1166,8 +1327,8 @@ export default function App() {
           <Typography color="text.secondary">
             All media in <Box component="code">data/target</Box>, matched against
             takeout metadata and photo times from each source. Click a photo taken
-            date to choose which source to use, then select files and apply to set
-            Date Created and Date Modified.
+            date to choose which source to use, or set a manual date in the picker,
+            then select files and apply to set Date Created and Date Modified.
           </Typography>
         </Box>
 
@@ -1273,6 +1434,7 @@ export default function App() {
               onToggleSelectAll={toggleSelectAllInTable}
               onPreview={setPreviewPath}
               onPhotoTakenSourceSelect={selectPhotoTakenSource}
+              onManualDateChange={setManualPhotoTaken}
               highlightMismatch
             />
             <FileTable
@@ -1286,6 +1448,7 @@ export default function App() {
               onToggleSelectAll={toggleSelectAllInTable}
               onPreview={setPreviewPath}
               onPhotoTakenSourceSelect={selectPhotoTakenSource}
+              onManualDateChange={setManualPhotoTaken}
             />
           </Stack>
         )}

@@ -12,6 +12,8 @@
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^9.1.1",
     "@mui/material": "^9.1.1",
+    "@mui/x-date-pickers": "^9.6.0",
+    "dayjs": "^1.11.21",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
