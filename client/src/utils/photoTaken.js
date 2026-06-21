@@ -78,9 +78,10 @@ export function getPhotoTakenEpochForSource(file, source) {
 export function getDefaultPhotoTakenSelection(file) {
   if (file.photoTaken?.filename != null) {
     const epoch = getPhotoTakenEpochForSource(file, "filename");
-    if (isValidEpochSeconds(epoch)) {
-      return { source: "filename", epoch };
-    }
+    return {
+      source: "filename",
+      epoch: isValidEpochSeconds(epoch) ? epoch : null,
+    };
   }
 
   if (file.photoTaken?.metadata != null) {
@@ -112,6 +113,10 @@ export function getPhotoTakenEpoch(file) {
 export function getPhotoTakenSource(file) {
   if (file.photoTakenSource) {
     return file.photoTakenSource;
+  }
+
+  if (file.photoTaken?.filename != null) {
+    return "filename";
   }
 
   if (file.photoTaken?.metadata != null) {
