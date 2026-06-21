@@ -32,7 +32,7 @@ function normalizeMediaPath(rawPath) {
 }
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
 
 app.get("/api/health", (_req, res) => {
   res.json({
