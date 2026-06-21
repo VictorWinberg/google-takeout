@@ -8,7 +8,14 @@ import { normalizeEpochSeconds } from "./lib/epoch-utils.js";
 
 const execFileAsync = promisify(execFile);
 
-const DATETIME_TITLE_RE = /^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})/;
+// Google Photos: 20250102_152300
+// Prefixed: instagram_20250102_152300, instagram_202501021523, instagram_20250102152300
+const DATETIME_TITLE_PATTERNS = [
+  /^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})/,
+  /_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})(?:\.|[^0-9]|$)/,
+  /_(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(?:\.|[^0-9]|$)/,
+  /_(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(?:\.|[^0-9]|$)/,
+];
 const EXIF_DATETIME_RE =
   /^(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:([+-]\d{2}:\d{2}))?$/;
 const MONTHS = [
@@ -31,25 +38,59 @@ export function getCoords(data) {
   return null;
 }
 
+function isValidLocalDateTimeParts({ year, month, day, hour, minute, second }) {
+  if (
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > 31 ||
+    hour > 23 ||
+    minute > 59 ||
+    second > 59
+  ) {
+    return false;
+  }
+
+  const date = new Date(year, month - 1, day, hour, minute, second);
+  return (
+    date.getFullYear() === year &&
+    date.getMonth() === month - 1 &&
+    date.getDate() === day &&
+    date.getHours() === hour &&
+    date.getMinutes() === minute &&
+    date.getSeconds() === second
+  );
+}
+
 export function parseDatetimeFromTitle(title) {
   if (title == null || title === "") {
     return null;
   }
 
-  const match = String(title).match(DATETIME_TITLE_RE);
-  if (!match) {
-    return null;
+  const value = String(title);
+
+  for (const pattern of DATETIME_TITLE_PATTERNS) {
+    const match = value.match(pattern);
+    if (!match) {
+      continue;
+    }
+
+    const [, year, month, day, hour, minute, second = "0"] = match;
+    const local = {
+      year: Number(year),
+      month: Number(month),
+      day: Number(day),
+      hour: Number(hour),
+      minute: Number(minute),
+      second: Number(second),
+    };
+
+    if (isValidLocalDateTimeParts(local)) {
+      return local;
+    }
   }
 
-  const [, year, month, day, hour, minute, second] = match;
-  return {
-    year: Number(year),
-    month: Number(month),
-    day: Number(day),
-    hour: Number(hour),
-    minute: Number(minute),
-    second: Number(second),
-  };
+  return null;
 }
 
 export function formatUtcOffset(offsetMinutes) {

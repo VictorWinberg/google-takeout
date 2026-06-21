@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dayjs from "dayjs";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import EventIcon from "@mui/icons-material/Event";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
-import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
+import { StaticDateTimePicker } from "@mui/x-date-pickers/StaticDateTimePicker";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -14,9 +15,11 @@ import Dialog from "@mui/material/Dialog";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import FormControl from "@mui/material/FormControl";
+import IconButton from "@mui/material/IconButton";
 import InputLabel from "@mui/material/InputLabel";
 import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
+import Popover from "@mui/material/Popover";
 import Select from "@mui/material/Select";
 import Stack from "@mui/material/Stack";
 import Table from "@mui/material/Table";
@@ -286,42 +289,72 @@ function getExifTimezoneInfo(file) {
 }
 
 function ManualPhotoTakenCell({ file, highlighted, onManualDateChange, onSelect }) {
+  const [anchorEl, setAnchorEl] = useState(null);
   const manualEpoch = getPhotoTakenEpochForSource(file, "manual");
+  const manualDisplay = file.photoTaken?.manual;
   const pickerValue = manualEpoch != null ? dayjs.unix(manualEpoch) : null;
+  const open = Boolean(anchorEl);
+
+  const tooltipTitle = manualDisplay
+    ? highlighted
+      ? `Used for apply · ${manualDisplay}`
+      : manualDisplay
+    : "Set manual date";
+
+  function handleOpen(event) {
+    event.stopPropagation();
+    if (manualEpoch != null && !highlighted) {
+      onSelect?.();
+    }
+    setAnchorEl(event.currentTarget);
+  }
+
+  function handleClose() {
+    setAnchorEl(null);
+  }
 
   return (
-    <Box onClick={(event) => event.stopPropagation()} sx={{ minWidth: 220 }}>
-      <DateTimePicker
-        value={pickerValue}
-        onChange={(newValue) => onManualDateChange(file.path, newValue)}
-        onOpen={() => {
-          if (manualEpoch != null && !highlighted) {
-            onSelect?.();
-          }
-        }}
-        format="D MMM YYYY, HH:mm:ss"
-        slotProps={{
-          field: { clearable: true },
-          textField: {
-            size: "small",
-            fullWidth: true,
-            placeholder: "Set date…",
-            inputProps: {
-              "aria-label": `Manual photo taken time for ${file.path}`,
-            },
-            sx: highlighted
+    <Box onClick={(event) => event.stopPropagation()}>
+      <Tooltip title={tooltipTitle} placement="top" arrow>
+        <IconButton
+          size="small"
+          onClick={handleOpen}
+          aria-label={tooltipTitle}
+          color={highlighted ? "primary" : "default"}
+          sx={
+            highlighted
               ? {
-                  "& .MuiInputBase-input": {
-                    color: "primary.main",
-                    fontWeight: 700,
-                  },
                   bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1),
-                  borderRadius: 0.5,
                 }
-              : undefined,
-          },
-        }}
-      />
+              : undefined
+          }
+        >
+          <EventIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
+      <Popover
+        open={open}
+        anchorEl={anchorEl}
+        onClose={handleClose}
+        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+        transformOrigin={{ vertical: "top", horizontal: "left" }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <StaticDateTimePicker
+          ampm={false}
+          value={pickerValue}
+          onChange={(newValue) => {
+            onManualDateChange(file.path, newValue);
+            if (newValue == null) {
+              handleClose();
+            }
+          }}
+          onAccept={handleClose}
+          slotProps={{
+            actionBar: { actions: ["clear", "accept"] },
+          }}
+        />
+      </Popover>
     </Box>
   );
 }
@@ -879,7 +912,7 @@ function FileTable({
         {title} ({files.length})
       </Typography>
       <TableContainer component={Paper} variant="outlined" sx={{ overflowX: "auto" }}>
-        <Table size="small" stickyHeader sx={{ minWidth: 1180 }}>
+        <Table size="small" stickyHeader sx={{ minWidth: 1000 }}>
           <TableHead>
             <TableRow>
               <TableCell padding="checkbox">
